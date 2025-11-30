@@ -81,6 +81,6 @@ class Config:
 # Validate configuration on import
 is_valid, error = Config.validate()
 if not is_valid:
-    print(f"⚠️  Configuration Error: {error}")
+    raise ValueError(f"Configuration Error: {error}")
     print("Please check your .env file and ensure all required variables are set.")
-    print("See .env.example for reference.")
+    print("See .env for reference.")    

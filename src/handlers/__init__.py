@@ -5,6 +5,8 @@ from .password_handler import PasswordHandler
 from .task_handler import TaskHandler
 from .file_handler import FileHandler
 from .search_handler import SearchHandler
+from .ai_handler import AIHandler
+from .settings_handler import SettingsHandler
 
 __all__ = [
     'StartHandler',
@@ -12,5 +14,7 @@ __all__ = [
     'PasswordHandler',
     'TaskHandler',
     'FileHandler',
-    'SearchHandler'
+    'SearchHandler',
+    'AIHandler',
+    'SettingsHandler'
 ]

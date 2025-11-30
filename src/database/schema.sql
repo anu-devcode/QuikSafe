@@ -1,7 +1,5 @@
-"""
-QuikSafe Bot - Database Schema
-Run this SQL in your Supabase SQL Editor to set up the database.
-"""
+-- QuikSafe Bot - Database Schema
+-- Run this SQL in your Supabase SQL Editor to set up the database.
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (

@@ -129,6 +129,47 @@ def format_task_item(task: Dict[str, Any]) -> str:
     return item
 
 
+def format_task_details(task: Dict[str, Any]) -> str:
+    """
+    Format task details for display.
+    
+    Args:
+        task: Task entry
+        
+    Returns:
+        Formatted message string
+    """
+    priority_emoji = {
+        'low': '🔵',
+        'medium': '🟡',
+        'high': '🔴'
+    }
+    
+    priority = task.get('priority', 'medium')
+    content = task.get('encrypted_content', 'N/A')
+    status = task.get('status', 'pending')
+    tags = task.get('tags', [])
+    due_date = task.get('due_date')
+    created_at = task.get('created_at')
+    
+    status_icon = "✅" if status == 'completed' else "📋"
+    
+    message = f"{status_icon} **Task Details**\n\n"
+    message += f"📝 **Content**: {content}\n"
+    message += f"⚡ **Priority**: {priority_emoji.get(priority, '⚪')} {priority.title()}\n"
+    message += f"📊 **Status**: {status.title()}\n"
+    
+    if due_date:
+        message += f"📅 **Due**: {format_datetime(due_date)}\n"
+        
+    if tags:
+        message += f"🏷️ **Tags**: {', '.join(tags)}\n"
+        
+    message += f"\n🕒 Created: {format_datetime(created_at)}\n"
+    
+    return message
+
+
 def format_file_list(files: List[Dict[str, Any]]) -> str:
     """
     Format file list for display.
@@ -161,6 +202,41 @@ def format_file_list(files: List[Dict[str, Any]]) -> str:
             message += f"   Tags: {', '.join(tags)}\n"
         
         message += f"   ID: `{file.get('id', 'N/A')}`\n\n"
+    
+    return message
+
+
+def format_file_details(file: Dict[str, Any], description: str = "") -> str:
+    """
+    Format file details for display.
+    
+    Args:
+        file: File entry
+        description: Decrypted description
+        
+    Returns:
+        Formatted message string
+    """
+    file_name = file.get('file_name', 'Unknown')
+    file_type = file.get('file_type', 'unknown')
+    file_size = file.get('file_size', 0)
+    tags = file.get('tags', [])
+    created_at = file.get('created_at')
+    
+    emoji = get_file_emoji(file_type)
+    
+    message = f"{emoji} **File Details**\n\n"
+    message += f"📄 **Name**: `{file_name}`\n"
+    message += f"📦 **Size**: {format_file_size(file_size)}\n"
+    message += f"📎 **Type**: {file_type}\n"
+    
+    if description:
+        message += f"\n📝 **Description**: {description}\n"
+        
+    if tags:
+        message += f"\n🏷️ **Tags**: {', '.join(tags)}\n"
+        
+    message += f"\n🕒 Uploaded: {format_datetime(created_at)}\n"
     
     return message
 

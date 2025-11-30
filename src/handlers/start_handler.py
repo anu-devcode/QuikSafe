@@ -8,6 +8,8 @@ from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, Mess
 from src.database.db_manager import DatabaseManager
 from src.security.auth import AuthManager, SessionManager
 from src.utils.formatters import format_welcome_message
+from src.utils.keyboard_builder import KeyboardBuilder
+from src.utils.deep_links import DeepLinkManager
 import logging
 
 logger = logging.getLogger(__name__)
@@ -46,15 +48,33 @@ class StartHandler:
         user = update.effective_user
         telegram_id = user.id
         
+        # Check for deep link parameters
+        deep_link_data = None
+        if context.args:
+            deep_link_param = context.args[0]
+            deep_link_data = DeepLinkManager.parse_link(deep_link_param)
+            if deep_link_data:
+                logger.info(f"Deep link detected: {deep_link_data['action']}")
+        
         # Check if user already exists
         existing_user = self.db.get_user_by_telegram_id(telegram_id)
         
         if existing_user:
             # User exists, ask for master password
-            await update.message.reply_text(
-                f"👋 Welcome back, {user.first_name}!\n\n"
-                "Please enter your master password to continue:"
-            )
+            message = f"👋 Welcome back, {user.first_name}!\n\n"
+            
+            if deep_link_data:
+                action_desc = DeepLinkManager.get_action_description(deep_link_data['action'])
+                message += f"You're accessing: {action_desc}\n\n"
+            
+            message += "Please enter your master password to continue:"
+            
+            await update.message.reply_text(message)
+            
+            # Store deep link data for after authentication
+            if deep_link_data:
+                context.user_data['deep_link'] = deep_link_data
+            
             return AWAITING_MASTER_PASSWORD
         else:
             # New user, show welcome and ask to create master password
@@ -71,6 +91,11 @@ class StartHandler:
                 "⚠️ **Important:** This password cannot be recovered if lost!\n\n"
                 "Please enter your master password:"
             )
+            
+            # Store deep link data for after registration
+            if deep_link_data:
+                context.user_data['deep_link'] = deep_link_data
+            
             return AWAITING_MASTER_PASSWORD
     
     async def receive_master_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -106,10 +131,16 @@ class StartHandler:
                     'authenticated': True
                 })
                 
-                await update.message.reply_text(
-                    "✅ Authentication successful!\n\n"
-                    "You can now use all bot features. Type /help to see available commands."
-                )
+                # Get deep link data if any
+                deep_link_data = context.user_data.get('deep_link')
+                
+                # Show modern main menu
+                await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                
+                # Clear deep link data
+                if 'deep_link' in context.user_data:
+                    del context.user_data['deep_link']
+                
                 return ConversationHandler.END
             else:
                 await update.message.reply_text(
@@ -138,18 +169,63 @@ class StartHandler:
                     'authenticated': True
                 })
                 
-                await update.message.reply_text(
-                    "✅ **Account Created Successfully!**\n\n"
-                    "Your master password has been set securely.\n"
-                    "Remember: This password cannot be recovered if lost!\n\n"
-                    "You're all set! Type /help to see what you can do."
-                )
+                # Get deep link data if any
+                deep_link_data = context.user_data.get('deep_link')
+                
+                # Show modern main menu
+                await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                
+                # Clear deep link data
+                if 'deep_link' in context.user_data:
+                    del context.user_data['deep_link']
+                
                 return ConversationHandler.END
             else:
                 await update.message.reply_text(
                     "❌ Failed to create account. Please try /start again."
                 )
                 return ConversationHandler.END
+    
+    async def _show_main_menu(self, message, user_name: str, deep_link_data: dict = None):
+        """
+        Show modern main menu with inline keyboard.
+        
+        Args:
+            message: Message object to reply to
+            user_name: User's first name
+            deep_link_data: Optional deep link data to handle
+        """
+        kb = KeyboardBuilder()
+        
+        # If deep link action provided, show targeted message
+        if deep_link_data:
+            action = deep_link_data.get('action')
+            action_desc = DeepLinkManager.get_action_description(action)
+            
+            welcome_text = (
+                f"✅ **Authentication Successful!**\n\n"
+                f"Redirecting you to: {action_desc}\n\n"
+                "Use the menu below to navigate:"
+            )
+        else:
+            welcome_text = (
+                f"👋 **Welcome, {user_name}!**\n\n"
+                "🔐 **QuikSafe Bot** - Your secure personal assistant\n\n"
+                "What would you like to do today?\n\n"
+                "━━━━━━━━━━━━━━━━━━━━━━\n"
+                "**Quick Actions:**\n"
+                "• Save passwords securely\n"
+                "• Manage tasks efficiently\n"
+                "• Store files safely\n"
+                "• Smart AI-powered search\n\n"
+                "Choose a category below to get started:"
+            )
+        
+        await message.reply_text(
+            welcome_text,
+            reply_markup=kb.main_menu(),
+            parse_mode='Markdown'
+        )
     
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """

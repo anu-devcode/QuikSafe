@@ -69,6 +69,60 @@ def validate_password(password: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+def check_password_strength(password: str) -> Tuple[int, str]:
+    """
+    Check password strength.
+    
+    Args:
+        password: Password to check
+        
+    Returns:
+        Tuple of (score 0-4, feedback message)
+    """
+    score = 0
+    feedback = []
+    
+    if not password:
+        return 0, "Empty password"
+    
+    # Length check
+    if len(password) >= 8:
+        score += 1
+    else:
+        feedback.append("Too short")
+        
+    # Complexity checks
+    if re.search(r'[A-Z]', password):
+        score += 1
+    else:
+        feedback.append("No uppercase")
+        
+    if re.search(r'[0-9]', password):
+        score += 1
+    else:
+        feedback.append("No numbers")
+        
+    if re.search(r'[!@#$%^&*(),.?":{}|<>]', password):
+        score += 1
+    else:
+        feedback.append("No special chars")
+        
+    # Result message
+    if score == 4:
+        msg = "🟢 Strong"
+    elif score == 3:
+        msg = "🟡 Moderate"
+    elif score == 2:
+        msg = "🟠 Weak"
+    else:
+        msg = "🔴 Very Weak"
+        
+    if feedback and score < 4:
+        msg += f" ({', '.join(feedback)})"
+        
+    return score, msg
+
+
 def validate_task_content(content: str) -> Tuple[bool, Optional[str]]:
     """
     Validate task content.
