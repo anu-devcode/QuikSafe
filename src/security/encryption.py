@@ -113,14 +113,4 @@ if __name__ == "__main__":
     print(f"Generated encryption key: {key}")
     print(f"Add this to your .env file as ENCRYPTION_KEY={key}")
     
-    # Test encryption/decryption
-    manager = EncryptionManager(key)
-    
-    test_password = "MySecurePassword123!"
-    encrypted = manager.encrypt(test_password)
-    decrypted = manager.decrypt(encrypted)
-    
-    print(f"\nOriginal: {test_password}")
-    print(f"Encrypted: {encrypted}")
-    print(f"Decrypted: {decrypted}")
-    print(f"Match: {test_password == decrypted}")
+

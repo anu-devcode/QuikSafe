@@ -89,6 +89,45 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to update master password: {e}")
             return False
+
+    def get_user_settings(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get user settings.
+        
+        Args:
+            user_id: User UUID
+            
+        Returns:
+            User settings dictionary
+        """
+        try:
+            result = self.client.table('users').select('settings').eq('id', user_id).execute()
+            if result.data and result.data[0].get('settings'):
+                return result.data[0]['settings']
+            return {}
+        except Exception as e:
+            logger.error(f"Failed to get user settings: {e}")
+            return {}
+
+    def update_user_settings(self, user_id: str, settings: Dict[str, Any]) -> bool:
+        """
+        Update user settings.
+        
+        Args:
+            user_id: User UUID
+            settings: New settings dictionary
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.client.table('users').update({
+                'settings': settings
+            }).eq('id', user_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update user settings: {e}")
+            return False
     
     # ==================== Password Operations ====================
     
@@ -146,6 +185,26 @@ class DatabaseManager:
             logger.error(f"Failed to get passwords: {e}")
             return []
     
+    def update_password(self, password_id: str, encrypted_password: str) -> bool:
+        """
+        Update password value.
+        
+        Args:
+            password_id: Password entry UUID
+            encrypted_password: New encrypted password
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.client.table('passwords').update({
+                'encrypted_password': encrypted_password
+            }).eq('id', password_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update password: {e}")
+            return False
+
     def delete_password(self, password_id: str, user_id: str) -> bool:
         """
         Delete a password entry.
@@ -162,6 +221,26 @@ class DatabaseManager:
             return True
         except Exception as e:
             logger.error(f"Failed to delete password: {e}")
+            return False
+
+    def update_password_tags(self, password_id: str, tags: List[str]) -> bool:
+        """
+        Update tags for a password entry.
+        
+        Args:
+            password_id: Password entry UUID
+            tags: List of tags
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            self.client.table('passwords').update({
+                'tags': tags
+            }).eq('id', password_id).execute()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update password tags: {e}")
             return False
     
     # ==================== Task Operations ====================
@@ -217,6 +296,24 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Failed to get tasks: {e}")
             return []
+
+    def get_task_by_id(self, task_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific task by ID.
+        
+        Args:
+            task_id: Task UUID
+            user_id: User UUID (for security)
+            
+        Returns:
+            Task data or None if not found
+        """
+        try:
+            result = self.client.table('tasks').select('*').eq('id', task_id).eq('user_id', user_id).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            logger.error(f"Failed to get task: {e}")
+            return None
     
     def update_task_status(self, task_id: str, user_id: str, status: str) -> bool:
         """

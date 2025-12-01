@@ -129,6 +129,17 @@ def format_task_item(task: Dict[str, Any]) -> str:
     return item
 
 
+
+def escape_markdown(text: str) -> str:
+    """Escape special Markdown characters."""
+    if not text:
+        return text
+    special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+    for char in special_chars:
+        text = text.replace(char, f'\\{char}')
+    return text
+
+
 def format_task_details(task: Dict[str, Any]) -> str:
     """
     Format task details for display.
@@ -146,16 +157,19 @@ def format_task_details(task: Dict[str, Any]) -> str:
     }
     
     priority = task.get('priority', 'medium')
-    content = task.get('encrypted_content', 'N/A')
+    content = task.get('content', task.get('encrypted_content', 'N/A'))
     status = task.get('status', 'pending')
     tags = task.get('tags', [])
     due_date = task.get('due_date')
     created_at = task.get('created_at')
     
+    # Escape special Markdown characters in content
+    escaped_content = escape_markdown(content)
+    
     status_icon = "✅" if status == 'completed' else "📋"
     
     message = f"{status_icon} **Task Details**\n\n"
-    message += f"📝 **Content**: {content}\n"
+    message += f"📝 **Content**: {escaped_content}\n"
     message += f"⚡ **Priority**: {priority_emoji.get(priority, '⚪')} {priority.title()}\n"
     message += f"📊 **Status**: {status.title()}\n"
     
@@ -163,7 +177,8 @@ def format_task_details(task: Dict[str, Any]) -> str:
         message += f"📅 **Due**: {format_datetime(due_date)}\n"
         
     if tags:
-        message += f"🏷️ **Tags**: {', '.join(tags)}\n"
+        escaped_tags = [escape_markdown(tag) for tag in tags]
+        message += f"🏷️ **Tags**: {', '.join(escaped_tags)}\n"
         
     message += f"\n🕒 Created: {format_datetime(created_at)}\n"
     

@@ -327,6 +327,14 @@ class CallbackHandler:
             # Ask for confirmation first? For now direct delete as per handler
             await self.password_handler.delete_password(update, pid)
             
+        elif action == 'password_copy':
+            pid = data.get('password_id')
+            await self.password_handler.copy_password(update, pid)
+            
+        elif action == 'password_edit':
+            pid = data.get('password_id')
+            await self.password_handler.start_edit_wizard(update, pid)
+            
         elif action == 'password_search':
             # TODO: Implement search
             await update.callback_query.edit_message_text("Search coming soon!")
@@ -365,6 +373,15 @@ class CallbackHandler:
             # This is part of the wizard flow, handled by handle_wizard_callback
             await self.task_handler.handle_wizard_callback(update, action, data)
             
+        elif action == 'task_status':
+            tid = data.get('task_id')  # decode_callback expands 'tid' to 'task_id'
+            new_status = data.get('status')  # decode_callback expands 's' to 'status'
+            await self.task_handler.change_task_status(update, tid, new_status)
+            
+        elif action == 'task_edit':
+            tid = data.get('task_id')  # decode_callback expands 'tid' to 'task_id'
+            await update.callback_query.answer("Edit task coming soon!", show_alert=True)
+            
         else:
             await update.callback_query.edit_message_text(f"Unknown task action: {action}")
     
@@ -395,6 +412,14 @@ class CallbackHandler:
             fid = data.get('file_id')
             await self.file_handler.delete_file(update, fid)
             
+        elif action == 'file_share':
+            fid = data.get('file_id')
+            await self.file_handler.share_file(update, fid)
+            
+        elif action == 'file_edit':
+            fid = data.get('file_id')
+            await update.callback_query.answer("Edit file info coming soon!", show_alert=True)
+            
         else:
             await update.callback_query.edit_message_text(f"Unknown file action: {action}")
     
@@ -409,6 +434,9 @@ class CallbackHandler:
             
         elif action == 'ai_summarize_tasks':
             await self.ai_handler.handle_summarize_tasks(update)
+            
+        elif action == 'ai_apply_tags':
+            await self.ai_handler.handle_apply_tags(update)
             
         else:
             await update.callback_query.edit_message_text(f"Unknown AI action: {action}")
@@ -429,8 +457,17 @@ class CallbackHandler:
         elif action == 'settings_notifications':
             await self.settings_handler.show_notifications_menu(update)
             
-        elif action in ['settings_autolock', 'settings_changepass', 'settings_toggle_reminders', 'settings_toggle_summary']:
-            await update.callback_query.answer("Coming soon in next update!", show_alert=True)
+        elif action == 'settings_autolock':
+            await self.settings_handler.change_auto_lock(update)
+            
+        elif action == 'settings_toggle_reminders':
+            await self.settings_handler.toggle_setting(update, 'tasks')
+            
+        elif action == 'settings_toggle_summary':
+            await self.settings_handler.toggle_setting(update, 'summary')
+            
+        elif action == 'settings_changepass':
+            await self.settings_handler.start_change_password_wizard(update)
             
         else:
             await update.callback_query.edit_message_text(f"Unknown settings action: {action}")

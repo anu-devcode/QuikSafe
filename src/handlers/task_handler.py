@@ -159,9 +159,8 @@ class TaskHandler:
             await self._send_auth_error(update)
             return
         
-        # Get task details (inefficient fetch all again, TODO: optimize)
-        tasks = self.db.get_tasks(user_id)
-        task = next((t for t in tasks if str(t['id']) == str(task_id)), None)
+        # Get task details
+        task = self.db.get_task_by_id(task_id, user_id)
         
         if not task:
             await self._send_error(update, "Task not found.")
@@ -176,8 +175,20 @@ class TaskHandler:
         reply_markup = self.kb.task_actions(task_id, task['status'])
         
         # Handle both Update and CallbackQuery objects
-        if hasattr(update, 'edit_message_text'):
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        elif hasattr(update, 'edit_message_text'):
             await update.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
                 message,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
@@ -403,8 +414,7 @@ class TaskHandler:
         is_auth, user_id = self._check_auth(user.id)
         
         # Get current status
-        tasks = self.db.get_tasks(user_id)
-        task = next((t for t in tasks if str(t['id']) == str(task_id)), None)
+        task = self.db.get_task_by_id(task_id, user_id)
         
         if not task:
             await update.callback_query.answer("Task not found")
@@ -428,6 +438,23 @@ class TaskHandler:
             await self.show_task_list(update, 0)
         else:
             await update.callback_query.answer("Failed to delete", show_alert=True)
+
+    async def change_task_status(self, update: Update, task_id: str, new_status: str):
+        """Change task status to a specific status."""
+        user = getattr(update, 'effective_user', None) or getattr(update, 'from_user', None)
+        is_auth, user_id = self._check_auth(user.id)
+        
+        if self.db.update_task_status(task_id, user_id, new_status):
+            status_msg = {
+                'pending': 'Marked as pending',
+                'in_progress': 'Started task',
+                'completed': 'Marked as completed'
+            }.get(new_status, f'Status changed to {new_status}')
+            
+            await update.callback_query.answer(status_msg)
+            await self.show_task_details(update, task_id)
+        else:
+            await update.callback_query.answer("Failed to update", show_alert=True)
 
     async def _send_auth_error(self, update: Update):
         """Send authentication error message."""

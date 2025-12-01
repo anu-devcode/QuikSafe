@@ -119,13 +119,57 @@ class AIHandler:
             "🏷️ **Tag Suggestions**\n\n"
             "Here are some suggestions for your untagged items:\n\n" +
             "\n".join(suggestions) +
-            "\n\n(Auto-applying tags is coming soon!)"
+            "\n\nClick 'Apply All' to save these tags."
         )
+        
+        keyboard = [
+            [InlineKeyboardButton("✅ Apply All", callback_data=self.kb.encode_callback('ai_apply_tags'))],
+            [InlineKeyboardButton(f"{self.kb.EMOJI['back']} Back to Menu", callback_data=self.kb.encode_callback('menu_ai'))]
+        ]
         
         await update.callback_query.edit_message_text(
             msg,
-            reply_markup=self.kb.back_to_menu('menu_ai'),
+            reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode='Markdown'
+        )
+
+    async def handle_apply_tags(self, update: Update):
+        """Apply suggested tags to items."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+            
+        await update.callback_query.edit_message_text("🤖 Applying tags... This may take a moment.")
+        
+        # Get untagged passwords
+        passwords = self.db.get_passwords(user_id)
+        untagged = [p for p in passwords if not p.get('tags')]
+        
+        if not untagged:
+            await update.callback_query.edit_message_text(
+                "✅ No untagged items found!",
+                reply_markup=self.kb.back_to_menu('menu_ai')
+            )
+            return
+            
+        count = 0
+        # Process first 3 untagged items
+        for item in untagged[:3]:
+            service_name = item['service_name']
+            suggested = self.ai_client.suggest_tags(service_name, "password")
+            
+            if suggested:
+                # Update password with new tags
+                if self.db.update_password_tags(item['id'], suggested):
+                    count += 1
+        
+        await update.callback_query.edit_message_text(
+            f"✅ Successfully auto-tagged {count} items!\n\n"
+            "They are now organized and easier to find.",
+            reply_markup=self.kb.back_to_menu('menu_ai')
         )
 
     async def handle_summarize_tasks(self, update: Update):

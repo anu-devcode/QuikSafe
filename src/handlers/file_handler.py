@@ -168,9 +168,20 @@ class FileHandler:
         reply_markup = self.kb.file_actions(file_id)
         
         # Handle both Update and CallbackQuery objects
-        if hasattr(update, 'edit_message_text'):
-            # update is a CallbackQuery object
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        elif hasattr(update, 'edit_message_text'):
             await update.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
                 message,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
@@ -218,6 +229,38 @@ class FileHandler:
             await self.show_file_list(update, 0)
         else:
             await update.callback_query.answer("Failed to delete", show_alert=True)
+
+    async def share_file(self, update: Update, file_id: str):
+        """Share a file (send it to the chat)."""
+        user = getattr(update, 'effective_user', None) or getattr(update, 'from_user', None)
+        is_auth, user_id = self._check_auth(user.id)
+        
+        # Get file details
+        files = self.db.get_files(user_id)
+        file_entry = next((f for f in files if str(f['id']) == str(file_id)), None)
+        
+        if not file_entry:
+            await update.callback_query.answer("File not found", show_alert=True)
+            return
+            
+        tg_file_id = file_entry['file_id']
+        caption = f"📎 {file_entry['file_name']}"
+        
+        try:
+            # Send file based on type
+            if 'image' in file_entry['file_type']:
+                await update.callback_query.message.reply_photo(photo=tg_file_id, caption=caption)
+            elif 'video' in file_entry['file_type']:
+                await update.callback_query.message.reply_video(video=tg_file_id, caption=caption)
+            elif 'audio' in file_entry['file_type']:
+                await update.callback_query.message.reply_audio(audio=tg_file_id, caption=caption)
+            else:
+                await update.callback_query.message.reply_document(document=tg_file_id, caption=caption)
+            
+            await update.callback_query.answer("File shared!")
+        except Exception as e:
+            logger.error(f"Failed to share file: {e}")
+            await update.callback_query.answer("Failed to share file", show_alert=True)
 
     async def handle_file_upload(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle file upload (direct message)."""

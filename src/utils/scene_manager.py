@@ -129,13 +129,7 @@ class SceneManager:
                 'confirm'
             ],
             
-            # File upload wizard
-            'upload_file': [
-                'file',
-                'description',
-                'tags',
-                'confirm'
-            ],
+
             
             # Edit password wizard
             'edit_password': [
@@ -144,12 +138,7 @@ class SceneManager:
                 'confirm'
             ],
             
-            # Edit task wizard
-            'edit_task': [
-                'select_field',
-                'new_value',
-                'confirm'
-            ],
+
         }
     
     def start_scene(self, telegram_id: int, scene_id: str) -> Optional[Scene]:

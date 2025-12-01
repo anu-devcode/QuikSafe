@@ -81,7 +81,7 @@ def main():
     file_handler = FileHandler(db, encryption, session, scene_manager)
     search_handler = SearchHandler(db, encryption, session, ai_client)
     ai_handler = AIHandler(db, encryption, session, ai_client)
-    settings_handler = SettingsHandler(db, session)
+    settings_handler = SettingsHandler(db, session, scene_manager, auth)
     
     callback_handler = CallbackHandler(
         db, encryption, session, ai_client,
@@ -114,6 +114,10 @@ def main():
                 if await task_handler.handle_wizard_input(update):
                     return
 
+            elif scene.scene_id == 'change_password':
+                if await settings_handler.handle_wizard_input(update):
+                    return
+
     # Register conversation handlers
     application.add_handler(start_handler.get_handler())
     
@@ -144,6 +148,19 @@ def main():
     
     # Task commands
     application.add_handler(CommandHandler('listtasks', task_handler.list_tasks))
+    application.add_handler(CommandHandler('addtask', task_handler.add_task_start))
+    application.add_handler(CommandHandler('completetask', task_handler.complete_task_command))
+    application.add_handler(CommandHandler('deletetask', task_handler.delete_task_command))
+    
+    # File commands
+    application.add_handler(CommandHandler('listfiles', file_handler.list_files))
+    application.add_handler(CommandHandler('getfile', file_handler.get_file))
+    application.add_handler(CommandHandler('deletefile', file_handler.delete_file_command))
+
+    # Search and AI commands
+    application.add_handler(CommandHandler('search', search_handler.search))
+    application.add_handler(CommandHandler('ai', ai_handler.show_menu))
+    application.add_handler(CommandHandler('summarize', search_handler.summarize))
     
     # Start the bot
     logger.info("Bot is starting... Press Ctrl+C to stop")

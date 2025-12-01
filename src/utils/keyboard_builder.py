@@ -65,7 +65,36 @@ class KeyboardBuilder:
         Returns:
             Encoded callback data (max 64 bytes)
         """
-        data = {'a': action, **kwargs}
+        # Action abbreviations to save space
+        action_map = {
+            'password_view': 'pv',
+            'password_list': 'pl',
+            'password_delete': 'pd',
+            'password_edit': 'pe',
+            'password_copy': 'pc',
+            'password_save_start': 'pss',
+            'password_search': 'ps',
+            
+            'task_view': 'tv',
+            'task_list': 'tl',
+            'task_delete': 'td',
+            'task_edit': 'te',
+            'task_status': 'ts',
+            'task_add_start': 'tas',
+            
+            'file_view': 'fv',
+            'file_list': 'fl',
+            'file_delete': 'fd',
+            'file_edit': 'fe',
+            'file_download': 'fdown',
+            'file_share': 'fs',
+            'file_upload_start': 'fus',
+        }
+        
+        # Use abbreviation if available
+        short_action = action_map.get(action, action)
+        
+        data = {'a': short_action, **kwargs}
         encoded = json.dumps(data, separators=(',', ':'))
         
         # Telegram callback data limit is 64 bytes
@@ -83,6 +112,11 @@ class KeyboardBuilder:
             for old, new in abbrev_map.items():
                 if old in data:
                     data[new] = data.pop(old)
+            
+            # Also check if keys are ALREADY abbreviated (e.g. passed as 'pid')
+            # This ensures we don't double-abbreviate or miss them
+            # No action needed as they are already short, but good to note.
+            
             encoded = json.dumps(data, separators=(',', ':'))
         
         return encoded[:64]  # Ensure limit
@@ -100,7 +134,37 @@ class KeyboardBuilder:
         """
         try:
             data = json.loads(callback_data)
-            # Expand abbreviations
+            
+            # Expand action abbreviations
+            action_map_rev = {
+                'pv': 'password_view',
+                'pl': 'password_list',
+                'pd': 'password_delete',
+                'pe': 'password_edit',
+                'pc': 'password_copy',
+                'pss': 'password_save_start',
+                'ps': 'password_search',
+                
+                'tv': 'task_view',
+                'tl': 'task_list',
+                'td': 'task_delete',
+                'te': 'task_edit',
+                'ts': 'task_status',
+                'tas': 'task_add_start',
+                
+                'fv': 'file_view',
+                'fl': 'file_list',
+                'fd': 'file_delete',
+                'fe': 'file_edit',
+                'fdown': 'file_download',
+                'fs': 'file_share',
+                'fus': 'file_upload_start',
+            }
+            
+            if 'a' in data and data['a'] in action_map_rev:
+                data['a'] = action_map_rev[data['a']]
+            
+            # Expand key abbreviations
             abbrev_map = {
                 'pid': 'password_id',
                 'tid': 'task_id',

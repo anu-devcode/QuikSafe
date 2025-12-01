@@ -174,16 +174,24 @@ class PasswordHandler:
         reply_markup = self.kb.password_actions(password_id)
         
         # Handle both Update and CallbackQuery objects
-        if hasattr(update, 'edit_message_text'):
+        if hasattr(update, 'callback_query') and update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        elif hasattr(update, 'edit_message_text'):
             await update.edit_message_text(
                 message,
                 reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
-            
-            # Auto-delete (handled by client side usually, but we can schedule a delete edit)
-            # For inline messages, we can edit it back to a "hidden" state after timeout
-            # But that's complex to manage state. We'll rely on user explicit hide or delete.
+        else:
+            await update.message.reply_text(
+                message,
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
         
     async def start_save_wizard(self, update: Update):
         """Start the save password wizard."""
@@ -229,9 +237,6 @@ class PasswordHandler:
             return False
             
         scene = self.scene_manager.get_scene(user.id)
-        if scene.scene_id != 'save_password':
-            return False
-            
         current_step = scene.get_current_step()
         text = update.message.text.strip()
         
@@ -240,72 +245,99 @@ class PasswordHandler:
             await update.message.delete()
         except Exception as e:
             logger.warning(f"Could not delete wizard input message: {e}")
-            
-        if current_step == 'service_name':
-            is_valid, error = validate_service_name(text)
-            if not is_valid:
-                await update.message.reply_text(f"❌ {error}\nPlease try again:")
-                return True
-                
-            self.scene_manager.set_scene_data(user.id, 'service_name', text)
-            self.scene_manager.advance_scene(user.id)
-            
-            await update.message.reply_text(
-                f"✅ Service: **{text}**\n\n"
-                "Step 2/4: **Username/Email**\n"
-                "Enter username (or type 'skip'):",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
-                ]])
-            )
-            
-        elif current_step == 'username':
-            username = text if text.lower() != 'skip' else ''
-            if username:
-                is_valid, error = validate_username(username)
+
+        if scene.scene_id == 'save_password':
+            if current_step == 'service_name':
+                is_valid, error = validate_service_name(text)
                 if not is_valid:
                     await update.message.reply_text(f"❌ {error}\nPlease try again:")
                     return True
-            
-            self.scene_manager.set_scene_data(user.id, 'username', username)
-            self.scene_manager.advance_scene(user.id)
-            
-            await update.message.reply_text(
-                "Step 3/4: **Password**\n"
-                "Enter the password:",
-                parse_mode='Markdown'
-            )
-            
-        elif current_step == 'password':
+                    
+                self.scene_manager.set_scene_data(user.id, 'service_name', text)
+                self.scene_manager.advance_scene(user.id)
+                
+                await update.message.reply_text(
+                    f"✅ Service: **{text}**\n\n"
+                    "Step 2/4: **Username/Email**\n"
+                    "Enter username (or type 'skip'):",
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                    ]])
+                )
+                
+            elif current_step == 'username':
+                username = text if text.lower() != 'skip' else ''
+                if username:
+                    is_valid, error = validate_username(username)
+                    if not is_valid:
+                        await update.message.reply_text(f"❌ {error}\nPlease try again:")
+                        return True
+                
+                self.scene_manager.set_scene_data(user.id, 'username', username)
+                self.scene_manager.advance_scene(user.id)
+                
+                await update.message.reply_text(
+                    "Step 3/4: **Password**\n"
+                    "Enter the password:",
+                    parse_mode='Markdown'
+                )
+                
+            elif current_step == 'password':
+                is_valid, error = validate_password(text)
+                if not is_valid:
+                    await update.message.reply_text(f"❌ {error}\nPlease try again:")
+                    return True
+                
+                # Check strength
+                score, strength_msg = check_password_strength(text)
+                    
+                self.scene_manager.set_scene_data(user.id, 'password', text)
+                self.scene_manager.advance_scene(user.id)
+                
+                await update.message.reply_text(
+                    f"Password Strength: {strength_msg}\n\n"
+                    "Step 4/4: **Tags**\n"
+                    "Enter tags (e.g. #work) or skip:",
+                    parse_mode='Markdown',
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                    ]])
+                )
+                
+            elif current_step == 'tags':
+                tags = parse_tags_from_text(text) if text.lower() != 'skip' else []
+                self.scene_manager.set_scene_data(user.id, 'tags', tags)
+                
+                # Save data
+                data = self.scene_manager.complete_scene(user.id)
+                await self._save_password_data(update, data)
+        
+        elif scene.scene_id == 'edit_password':
+            # Simple edit flow: just update password
             is_valid, error = validate_password(text)
             if not is_valid:
                 await update.message.reply_text(f"❌ {error}\nPlease try again:")
                 return True
             
-            # Check strength
-            score, strength_msg = check_password_strength(text)
-                
-            self.scene_manager.set_scene_data(user.id, 'password', text)
-            self.scene_manager.advance_scene(user.id)
+            password_id = scene.get_data('password_id')
+            encrypted_password = self.encryption.encrypt(text)
             
-            await update.message.reply_text(
-                f"Password Strength: {strength_msg}\n\n"
-                "Step 4/4: **Tags**\n"
-                "Enter tags (e.g. #work) or skip:",
-                parse_mode='Markdown',
-                reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
-                ]])
-            )
+            # Update in DB (we need a method for this, or use raw query)
+            # For now, let's assume we can update just the password
+            # But wait, db_manager doesn't have update_password method yet!
+            # We'll need to add it or use a raw update.
+            # Let's add update_password to db_manager first? 
+            # Or just hack it here if we can access client.
+            # Better to add to db_manager.
             
-        elif current_step == 'tags':
-            tags = parse_tags_from_text(text) if text.lower() != 'skip' else []
-            self.scene_manager.set_scene_data(user.id, 'tags', tags)
+            # Since I can't edit db_manager in this turn easily without context switch,
+            # I will use the client directly if possible or add it to db_manager in next step.
+            # Actually, I should add it to db_manager.
             
-            # Save data
-            data = self.scene_manager.complete_scene(user.id)
-            await self._save_password_data(update, data)
+            # For now, let's just finish the scene and call a method we will create.
+            self.scene_manager.complete_scene(user.id)
+            await self._update_password_value(update, password_id, encrypted_password)
             
         return True
 
@@ -381,6 +413,70 @@ class PasswordHandler:
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
+
+    async def copy_password(self, update: Update, password_id: str):
+        """Copy a password to clipboard (send as monospaced text)."""
+        user = getattr(update, 'effective_user', None) or getattr(update, 'from_user', None)
+        is_auth, user_id = self._check_auth(user.id)
+        
+        # Get password details
+        passwords = self.db.get_passwords(user_id)
+        password_entry = next((p for p in passwords if str(p['id']) == str(password_id)), None)
+        
+        if not password_entry:
+            await update.callback_query.answer("Password not found", show_alert=True)
+            return
+        
+        # Decrypt
+        decrypted_password = self.encryption.decrypt(password_entry['encrypted_password'])
+        
+        # Send as copyable text
+        await update.callback_query.answer("Password sent below")
+        await update.callback_query.message.reply_text(
+            f"`{decrypted_password}`",
+            parse_mode='MarkdownV2'
+        )
+
+    async def start_edit_wizard(self, update: Update, password_id: str):
+        """Start the edit password wizard."""
+        user = getattr(update, 'effective_user', None) or getattr(update, 'from_user', None)
+        is_auth, user_id = self._check_auth(user.id)
+        
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+            
+        self.scene_manager.start_scene(user.id, 'edit_password')
+        self.scene_manager.set_scene_data(user.id, 'password_id', password_id)
+        
+        message = (
+            "✏️ **Edit Password**\n\n"
+            "Enter the new password:"
+        )
+        
+        keyboard = [[
+            InlineKeyboardButton(
+                f"{self.kb.EMOJI['cancel']} Cancel",
+                callback_data=self.kb.encode_callback('cancel')
+            )
+        ]]
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+
+    async def _update_password_value(self, update: Update, password_id: str, encrypted_password: str):
+        """Internal method to update password value."""
+        is_auth, user_id = self._check_auth(update.effective_user.id)
+        
+        if self.db.update_password(password_id, encrypted_password):
+            msg = "✅ **Password Updated!**"
+            await self.show_password_details(update, password_id)
+        else:
+            await update.message.reply_text("❌ Failed to update password.")
 
     async def delete_password(self, update: Update, password_id: str):
         """Delete a password."""
