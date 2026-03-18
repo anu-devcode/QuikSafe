@@ -187,28 +187,48 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['password']} Passwords",
+                    f"{cls.EMOJI['add']} Quick Save",
+                    callback_data=cls.encode_callback('quick_save_password')
+                ),
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['task']} Quick Task",
+                    callback_data=cls.encode_callback('quick_add_task')
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['upload']} Quick Upload",
+                    callback_data=cls.encode_callback('quick_upload_file')
+                ),
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['search']} Quick Search",
+                    callback_data=cls.encode_callback('quick_search')
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['password']} Password Vault",
                     callback_data=cls.encode_callback('menu_passwords')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['task']} Tasks",
+                    f"{cls.EMOJI['task']} Task Planner",
                     callback_data=cls.encode_callback('menu_tasks')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['file']} Files",
+                    f"{cls.EMOJI['file']} File Hub",
                     callback_data=cls.encode_callback('menu_files')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['search']} Search",
-                    callback_data=cls.encode_callback('menu_search')
+                    f"{cls.EMOJI['ai']} AI Assistant",
+                    callback_data=cls.encode_callback('menu_ai')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['ai']} AI Assistant",
-                    callback_data=cls.encode_callback('menu_ai')
+                    f"{cls.EMOJI['search']} Smart Search",
+                    callback_data=cls.encode_callback('menu_search')
                 ),
                 InlineKeyboardButton(
                     f"{cls.EMOJI['settings']} Settings",
@@ -267,7 +287,7 @@ class KeyboardBuilder:
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['view']} View All Passwords",
+                    f"{cls.EMOJI['view']} Browse Passwords",
                     callback_data=cls.encode_callback('password_list', p=0)
                 ),
             ],
@@ -275,6 +295,10 @@ class KeyboardBuilder:
                 InlineKeyboardButton(
                     f"{cls.EMOJI['search']} Search Passwords",
                     callback_data=cls.encode_callback('password_search')
+                ),
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['home']} Dashboard",
+                    callback_data=cls.encode_callback('main_menu')
                 ),
             ],
             [
@@ -314,6 +338,12 @@ class KeyboardBuilder:
                 InlineKeyboardButton(
                     f"{cls.EMOJI['view']} All Tasks",
                     callback_data=cls.encode_callback('task_list', s='all')
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['home']} Dashboard",
+                    callback_data=cls.encode_callback('main_menu')
                 ),
             ],
             [
@@ -359,6 +389,12 @@ class KeyboardBuilder:
                 InlineKeyboardButton(
                     f"🎵 Audio",
                     callback_data=cls.encode_callback('file_list', f='audio')
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{cls.EMOJI['home']} Dashboard",
+                    callback_data=cls.encode_callback('main_menu')
                 ),
             ],
             [

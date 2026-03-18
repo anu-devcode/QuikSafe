@@ -7,6 +7,7 @@ from .file_handler import FileHandler
 from .search_handler import SearchHandler
 from .ai_handler import AIHandler
 from .settings_handler import SettingsHandler
+from .reset_handler import ResetHandler
 
 __all__ = [
     'StartHandler',
@@ -16,5 +17,6 @@ __all__ = [
     'FileHandler',
     'SearchHandler',
     'AIHandler',
-    'SettingsHandler'
+    'SettingsHandler',
+    'ResetHandler'
 ]

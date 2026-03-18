@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 class CallbackHandler:
     """Central handler for all callback queries from inline keyboards."""
     
-    def __init__(self, db, encryption, session, ai_client, password_handler=None, task_handler=None, file_handler=None, ai_handler=None, search_handler=None, settings_handler=None, scene_manager=None):
+    def __init__(self, db, encryption, session, ai_client, password_handler=None, task_handler=None, file_handler=None, ai_handler=None, search_handler=None, settings_handler=None, scene_manager=None, analytics=None):
         """
         Initialize callback handler.
         
@@ -44,6 +44,7 @@ class CallbackHandler:
         self.search_handler = search_handler
         self.settings_handler = settings_handler
         self.scene_manager = scene_manager
+        self.analytics = analytics
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
@@ -59,6 +60,14 @@ class CallbackHandler:
         # Decode callback data
         data = self.kb.decode_callback(query.data)
         action = data.get('a', '')
+        if self.analytics:
+            user_id = self._get_user_id(update.effective_user.id)
+            self.analytics.track(
+                'ui_callback_clicked',
+                telegram_id=update.effective_user.id,
+                user_id=user_id,
+                metadata={'action': action}
+            )
         
         # Check authentication for protected actions
         if not action.startswith('main_menu') and action != 'noop':
@@ -185,8 +194,9 @@ class CallbackHandler:
         
         message = (
             f"👋 **Welcome back, {user_name}!**\n\n"
-            "What would you like to do today?\n\n"
-            "Choose a category below:"
+            "Your secure workspace is ready.\n\n"
+            "**Fast lane:** use Quick Save / Quick Task / Quick Upload.\n"
+            "**Full control:** open Password Vault, Task Planner, File Hub, AI, or Settings."
         )
         
         await query.edit_message_text(
@@ -199,9 +209,10 @@ class CallbackHandler:
         """Show password management menu."""
         query = update.callback_query
         message = (
-            "🔐 **Password Management**\n\n"
-            "Securely manage your passwords with AES-256 encryption.\n\n"
-            "What would you like to do?"
+            "🔐 **Password Vault**\n\n"
+            "Save, view, and organize credentials securely.\n"
+            "Everything is encrypted before storage.\n\n"
+            "Choose your next action:"
         )
         
         await query.edit_message_text(
@@ -214,9 +225,9 @@ class CallbackHandler:
         """Show task management menu."""
         query = update.callback_query
         message = (
-            "✅ **Task Management**\n\n"
-            "Organize and track your tasks efficiently.\n\n"
-            "Choose an option:"
+            "✅ **Task Planner**\n\n"
+            "Capture tasks quickly, set priority, and track progress.\n\n"
+            "Choose a view or add a new task:"
         )
         
         await query.edit_message_text(
@@ -229,9 +240,9 @@ class CallbackHandler:
         """Show file management menu."""
         query = update.callback_query
         message = (
-            "📁 **File Management**\n\n"
-            "Store and organize your files securely.\n\n"
-            "Browse by category or view all:"
+            "📁 **File Hub**\n\n"
+            "Upload and organize documents, photos, videos, and audio.\n\n"
+            "Browse by type or view everything:"
         )
         
         await query.edit_message_text(
@@ -245,8 +256,9 @@ class CallbackHandler:
         query = update.callback_query
         message = (
             "🔍 **Smart Search**\n\n"
-            "Search across all your passwords, tasks, and files.\n\n"
-            "Type your search query or use /search <query>"
+            "Search across passwords, tasks, and files in one place.\n\n"
+            "Use: `/search <your query>`\n"
+            "Example: `/search invoices march`"
         )
         
         await query.edit_message_text(
@@ -289,8 +301,8 @@ class CallbackHandler:
         """Quick action: Upload file."""
         await update.callback_query.edit_message_text(
             "📁 **Upload File**\n\n"
-            "Simply send any file, photo, or video to this chat.\n"
-            "I'll save it securely for you!"
+            "Send any file, photo, video, audio, or voice message now.\n"
+            "I will store it securely and make it searchable."
         )
     
     async def _quick_search(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -299,7 +311,7 @@ class CallbackHandler:
             "🔍 **Smart Search**\n\n"
             "Search across all your data.\n\n"
             "Use: /search <your query>\n"
-            "Example: /search work passwords"
+            "Example: /search urgent tasks this week"
         )
     
     # ==================== Action Handlers ====================
@@ -522,6 +534,7 @@ class CallbackHandler:
             self.scene_manager.cancel_scene(update.effective_user.id)
             
         await update.callback_query.edit_message_text(
-            "❌ Operation cancelled.\n\n"
-            "Use /start to return to the main menu."
+            "✅ Operation cancelled.\n\n"
+            "Choose what you want to do next:",
+            reply_markup=self.kb.main_menu()
         )

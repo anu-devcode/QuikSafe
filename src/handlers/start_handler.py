@@ -21,7 +21,7 @@ AWAITING_MASTER_PASSWORD = 1
 class StartHandler:
     """Handles /start command and user registration."""
     
-    def __init__(self, db: DatabaseManager, auth: AuthManager, session: SessionManager, scene_manager=None):
+    def __init__(self, db: DatabaseManager, auth: AuthManager, session: SessionManager, scene_manager=None, analytics=None):
         """
         Initialize start handler.
         
@@ -34,6 +34,7 @@ class StartHandler:
         self.auth = auth
         self.session = session
         self.scene_manager = scene_manager
+        self.analytics = analytics
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """
@@ -56,6 +57,9 @@ class StartHandler:
         
         # Check for deep link parameters
         deep_link_data = None
+        if self.analytics:
+            self.analytics.track('onboarding_start_opened', telegram_id=telegram_id)
+
         if context.args:
             deep_link_param = context.args[0]
             deep_link_data = DeepLinkManager.parse_link(deep_link_param)
@@ -79,6 +83,8 @@ class StartHandler:
             message += "Please enter your master password to continue:"
             
             await update.message.reply_text(message)
+            if self.analytics:
+                self.analytics.track('onboarding_login_prompt_shown', telegram_id=telegram_id)
             
             # Store deep link data for after authentication
             if deep_link_data:
@@ -101,8 +107,11 @@ class StartHandler:
                 "• Contain at least one number\n"
                 "• Contain at least one special character (!@#$%^&*)\n\n"
                 "⚠️ **Important:** This password cannot be recovered if lost!\n\n"
-                "Please enter your master password:"
+                "Please enter your master password:",
+                parse_mode='Markdown'
             )
+            if self.analytics:
+                self.analytics.track('onboarding_registration_prompt_shown', telegram_id=telegram_id)
             
             # Store deep link data for after registration
             if deep_link_data:
@@ -160,7 +169,9 @@ class StartHandler:
                 deep_link_data = context.user_data.get('deep_link')
                 
                 # Show modern main menu
-                await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                await self._show_main_menu(update.message, user.first_name, existing_user['id'], deep_link_data)
+                if self.analytics:
+                    self.analytics.track('auth_login_success', telegram_id=telegram_id, user_id=existing_user['id'])
                 
                 # Clear deep link data
                 if 'deep_link' in context.user_data:
@@ -172,6 +183,8 @@ class StartHandler:
                 await update.message.reply_text(
                     "❌ Incorrect master password. Please try again:"
                 )
+                if self.analytics:
+                    self.analytics.track('auth_login_failed', telegram_id=telegram_id)
                 return AWAITING_MASTER_PASSWORD
         else:
             # If account already exists during register mode, redirect to login flow.
@@ -185,10 +198,12 @@ class StartHandler:
                     })
 
                     deep_link_data = context.user_data.get('deep_link')
-                    await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                    await self._show_main_menu(update.message, user.first_name, existing_user['id'], deep_link_data)
                     if 'deep_link' in context.user_data:
                         del context.user_data['deep_link']
                     self._clear_auth_flow_context(context)
+                    if self.analytics:
+                        self.analytics.track('auth_login_success', telegram_id=telegram_id, user_id=existing_user['id'])
                     return ConversationHandler.END
 
                 context.user_data['auth_flow_mode'] = 'login'
@@ -223,7 +238,9 @@ class StartHandler:
                 deep_link_data = context.user_data.get('deep_link')
                 
                 # Show modern main menu
-                await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                await self._show_main_menu(update.message, user.first_name, new_user['id'], deep_link_data)
+                if self.analytics:
+                    self.analytics.track('auth_registration_success', telegram_id=telegram_id, user_id=new_user['id'])
                 
                 # Clear deep link data
                 if 'deep_link' in context.user_data:
@@ -238,7 +255,7 @@ class StartHandler:
                 self._clear_auth_flow_context(context)
                 return ConversationHandler.END
     
-    async def _show_main_menu(self, message, user_name: str, deep_link_data: dict = None):
+    async def _show_main_menu(self, message, user_name: str, user_id: str, deep_link_data: dict = None):
         """
         Show modern main menu with inline keyboard.
         
@@ -260,17 +277,28 @@ class StartHandler:
                 "Use the menu below to navigate:"
             )
         else:
+            overview = self.db.get_user_task_overview(user_id)
+            focus_line = "You are all caught up."
+            if overview['overdue_high'] > 0:
+                focus_line = f"Focus now: {overview['overdue_high']} high-priority overdue task(s)."
+            elif overview['pending'] > 0:
+                focus_line = f"Focus now: {overview['pending']} pending task(s)."
+
             welcome_text = (
                 f"👋 **Welcome, {user_name}!**\n\n"
-                "🔐 **QuikSafe Bot** - Your secure personal assistant\n\n"
-                "What would you like to do today?\n\n"
-                "━━━━━━━━━━━━━━━━━━━━━━\n"
-                "**Quick Actions:**\n"
-                "• Save passwords securely\n"
-                "• Manage tasks efficiently\n"
-                "• Store files safely\n"
-                "• Smart AI-powered search\n\n"
-                "Choose a category below to get started:"
+                "Your secure workspace is ready.\n\n"
+                f"⚡ **Today**: {focus_line}\n\n"
+                "**Fast lane**\n"
+                "• Quick Save for passwords\n"
+                "• Quick Task for instant planning\n"
+                "• Quick Upload for files\n"
+                "• Quick Search across everything\n\n"
+                "**Workspace modules**\n"
+                "• Password Vault\n"
+                "• Task Planner\n"
+                "• File Hub\n"
+                "• AI Assistant\n\n"
+                "Choose an option below:"
             )
         
         await message.reply_text(

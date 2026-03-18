@@ -42,6 +42,9 @@ Set all of these on the app service:
 - DB_RUN_MIGRATIONS_ON_STARTUP=true
 - DEBUG_MODE=false
 
+Optional (support operations):
+- SUPPORT_ADMIN_TELEGRAM_IDS=123456789,987654321
+
 For `DATABASE_URL`, use the internal Coolify connection string for your PostgreSQL service.
 
 ## 5. Telegram Integration Checklist
@@ -69,3 +72,19 @@ For `DATABASE_URL`, use the internal Coolify connection string for your PostgreS
 	- Ensure Dockerfile is committed and pushed to the same branch selected in Coolify.
 	- Ensure Base directory points to the repository folder containing Dockerfile.
 	- Ensure Dockerfile path is exactly ./Dockerfile.
+
+## 8. Recovery Operations
+
+- User self-recovery: `/resetmaster`
+- Admin unlock (if configured in `SUPPORT_ADMIN_TELEGRAM_IDS`): `/adminreset <telegram_id>`
+- `adminreset` only clears lockout/reset state; it does not set or reveal passwords.
+
+## 9. Analytics & Monitoring
+
+- Product analytics events are stored in the `analytics_events` table.
+- Use this table to monitor onboarding conversion, feature usage, and security friction.
+- Recommended dashboard slices:
+	- auth success vs auth failure
+	- blocked unauthenticated command/input counts
+	- top callback actions by day
+	- runtime error event trend

@@ -53,8 +53,8 @@ class AIHandler:
             
         message = (
             "🤖 **AI Assistant**\n\n"
-            "I can help you organize and understand your data.\n\n"
-            "Choose an action:"
+            "Get smart help to organize, prioritize, and summarize your data.\n\n"
+            "Choose what you want to do:"
         )
         
         keyboard = [
@@ -96,7 +96,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Analyzing your data... This may take a moment.")
+        await update.callback_query.edit_message_text("🤖 Analyzing your data for better tags. This may take a moment...")
         
         # Get untagged items across all categories
         passwords = self.db.get_passwords(user_id)
@@ -143,9 +143,9 @@ class AIHandler:
             
         msg = (
             "🏷️ **Tag Suggestions**\n\n"
-            "Here are some suggestions for your untagged items:\n\n" +
+            "Here are smart suggestions for untagged items:\n\n" +
             "\n".join(suggestions) +
-            "\n\nClick 'Apply All' to save these tags."
+            "\n\nTap **Apply All** to save them automatically."
         )
         
         keyboard = [
@@ -168,7 +168,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Applying tags... This may take a moment.")
+        await update.callback_query.edit_message_text("🤖 Applying tags now... Please wait a moment.")
         
         # Get untagged items
         passwords = self.db.get_passwords(user_id)
@@ -222,11 +222,11 @@ class AIHandler:
         total = count_passwords + count_tasks + count_files
         
         await update.callback_query.edit_message_text(
-            f"✅ Successfully auto-tagged {total} items!\n"
+            f"✅ Auto-tagging complete: {total} item(s) updated.\n"
             f"• Passwords: {count_passwords}\n"
             f"• Tasks: {count_tasks}\n"
             f"• Files: {count_files}\n\n"
-            "They are now organized and easier to find.",
+            "Your data is now easier to search and filter.",
             reply_markup=self.kb.back_to_menu('menu_ai')
         )
 
@@ -239,7 +239,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Generating summary...")
+        await update.callback_query.edit_message_text("🤖 Generating your task summary...")
         
         tasks = self.db.get_tasks(user_id)
         
@@ -264,7 +264,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
 
-        await update.callback_query.edit_message_text("🤖 Prioritizing your tasks...")
+        await update.callback_query.edit_message_text("🤖 Building your priority queue...")
 
         tasks = self.db.get_tasks(user_id)
         for task in tasks:

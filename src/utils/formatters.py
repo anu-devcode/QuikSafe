@@ -377,6 +377,8 @@ Send any file to save it
 **Other Commands**
 /help - Show this help message
 /start - Restart the bot
+/resetmaster - Recover access if master password is forgotten
+/adminreset <telegram_id> - Admin-only unlock for reset flow
 
 💡 **Tips:**
 - Use tags (e.g., #work #important) to organize your data

@@ -64,7 +64,7 @@ class SettingsHandler:
             
         message = (
             "⚙️ **Settings**\n\n"
-            "Configure your bot preferences.\n\n"
+            "Customize security and notifications in one place.\n\n"
             "**Security**\n"
             f"• Auto-lock: {auto_lock} minutes\n"
             "• Data Encryption: AES-256 (Active)\n\n"
@@ -75,11 +75,11 @@ class SettingsHandler:
         
         keyboard = [
             [
-                InlineKeyboardButton("🔒 Security Settings", callback_data=self.kb.encode_callback('settings_security')),
+                InlineKeyboardButton("🔒 Security", callback_data=self.kb.encode_callback('settings_security')),
                 InlineKeyboardButton("🔔 Notifications", callback_data=self.kb.encode_callback('settings_notifications'))
             ],
             [
-                InlineKeyboardButton("🗑️ Clear Session (Logout)", callback_data=self.kb.encode_callback('settings_logout'))
+                InlineKeyboardButton("🚪 Log Out", callback_data=self.kb.encode_callback('settings_logout'))
             ],
             [
                 InlineKeyboardButton("🆘 Contact Support", url="https://t.me/Billaden5")
@@ -109,7 +109,7 @@ class SettingsHandler:
         
         await update.callback_query.edit_message_text(
             "👋 **Logged Out**\n\n"
-            "Your session has been cleared securely.\n"
+            "Your secure session has been cleared.\n"
             "Use /start to log in again."
         )
 
@@ -127,7 +127,7 @@ class SettingsHandler:
             
         message = (
             "🔒 **Security Settings**\n\n"
-            "Manage your account security.\n\n"
+            "Manage access and protection controls.\n\n"
             "• **Encryption**: AES-256 (Always On)\n"
             f"• **Auto-Lock**: {auto_lock} Minutes\n"
             "• **Biometric**: Disabled (Coming Soon)"
@@ -136,7 +136,7 @@ class SettingsHandler:
         keyboard = [
             [
                 InlineKeyboardButton("⏱️ Change Auto-Lock", callback_data=self.kb.encode_callback('settings_autolock')),
-                InlineKeyboardButton("🔑 Change Master Pass", callback_data=self.kb.encode_callback('settings_changepass'))
+                InlineKeyboardButton("🔑 Change Master Password", callback_data=self.kb.encode_callback('settings_changepass'))
             ],
             [
                 InlineKeyboardButton(f"{self.kb.EMOJI['back']} Back to Settings", callback_data=self.kb.encode_callback('menu_settings'))
@@ -199,7 +199,7 @@ class SettingsHandler:
             
         message = (
             "🔔 **Notification Settings**\n\n"
-            "Customize your alerts.\n\n"
+            "Choose which reminders you want to receive.\n\n"
             f"• **Task Reminders**: {tasks_icon} {'On' if tasks_on else 'Off'}\n"
             f"• **Weekly Summary**: {summary_icon} {'On' if summary_on else 'Off'}\n"
             "• **Security Alerts**: ✅ On"
@@ -208,7 +208,7 @@ class SettingsHandler:
         keyboard = [
             [
                 InlineKeyboardButton(f"{tasks_icon} Toggle Reminders", callback_data=self.kb.encode_callback('settings_toggle_reminders')),
-                InlineKeyboardButton(f"{summary_icon} Toggle Summary", callback_data=self.kb.encode_callback('settings_toggle_summary'))
+                InlineKeyboardButton(f"{summary_icon} Toggle Weekly", callback_data=self.kb.encode_callback('settings_toggle_summary'))
             ],
             [
                 InlineKeyboardButton(f"{self.kb.EMOJI['back']} Back to Settings", callback_data=self.kb.encode_callback('menu_settings'))
@@ -261,7 +261,7 @@ class SettingsHandler:
         message = (
             "🔑 **Change Master Password**\n\n"
             "Step 1/3: **Current Password**\n"
-            "Please enter your current master password:"
+            "Enter your current master password:"
         )
         
         keyboard = [[
@@ -271,18 +271,23 @@ class SettingsHandler:
             )
         ]]
         
+        wizard_message = None
         if update.callback_query:
-            await update.callback_query.edit_message_text(
+            wizard_message = await update.callback_query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(
+            wizard_message = await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
+
+        if wizard_message:
+            self.scene_manager.set_scene_data(user.id, 'wizard_chat_id', wizard_message.chat_id)
+            self.scene_manager.set_scene_data(user.id, 'wizard_message_id', wizard_message.message_id)
 
     async def handle_wizard_input(self, update: Update):
         """Handle wizard input for settings."""
@@ -316,11 +321,12 @@ class SettingsHandler:
                 return True
                 
             self.scene_manager.advance_scene(user.id)
-            await update.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 "✅ Password verified.\n\n"
                 "Step 2/3: **New Password**\n"
-                "Enter your new strong password:",
-                parse_mode='Markdown'
+                "Enter your new strong password:"
             )
             
         elif current_step == 'new_password':
@@ -332,10 +338,11 @@ class SettingsHandler:
             self.scene_manager.set_scene_data(user.id, 'new_password', text)
             self.scene_manager.advance_scene(user.id)
             
-            await update.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 "Step 3/3: **Confirm Password**\n"
-                "Please re-enter your new password:",
-                parse_mode='Markdown'
+                "Please re-enter your new password:"
             )
             
         elif current_step == 'confirm_password':
@@ -377,3 +384,31 @@ class SettingsHandler:
             await update.callback_query.answer(text, show_alert=True)
         else:
             await update.message.reply_text(f"❌ {text}")
+
+    async def _send_wizard_step(self, update: Update, telegram_id: int, text: str, reply_markup=None):
+        """Edit existing wizard prompt when possible to keep chat clean."""
+        scene = self.scene_manager.get_scene(telegram_id)
+        if scene:
+            chat_id = scene.get_data('wizard_chat_id')
+            message_id = scene.get_data('wizard_message_id')
+            if chat_id and message_id:
+                try:
+                    await update.get_bot().edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
+                    )
+                    return
+                except Exception:
+                    pass
+
+        if update.message:
+            sent = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            sent = await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+        if scene and sent:
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_chat_id', sent.chat_id)
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_message_id', sent.message_id)

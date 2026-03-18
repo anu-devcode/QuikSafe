@@ -30,6 +30,11 @@ class Config:
     
     # Security Configuration
     ENCRYPTION_KEY: str = os.getenv('ENCRYPTION_KEY', '')
+    SUPPORT_ADMIN_TELEGRAM_IDS: set[int] = {
+        int(item.strip())
+        for item in os.getenv('SUPPORT_ADMIN_TELEGRAM_IDS', '').split(',')
+        if item.strip().isdigit()
+    }
     
     # Bot Configuration
     DEBUG_MODE: bool = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
@@ -68,6 +73,7 @@ class Config:
             'database_configured': bool(cls.DATABASE_URL),
             'huggingface_configured': bool(cls.HUGGINGFACE_API_KEY),
             'encryption_configured': bool(cls.ENCRYPTION_KEY),
+            'support_admin_count': len(cls.SUPPORT_ADMIN_TELEGRAM_IDS),
             'db_pool_min_size': cls.DB_POOL_MIN_SIZE,
             'db_pool_max_size': cls.DB_POOL_MAX_SIZE,
             'debug_mode': cls.DEBUG_MODE

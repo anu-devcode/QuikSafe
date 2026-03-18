@@ -157,8 +157,7 @@ class PasswordHandler:
         # Ideally DB manager should have get_password_by_id. 
         # For now, let's fetch all and find (inefficient but works for prototype)
         # TODO: Add get_password_by_id to DB manager
-        passwords = self.db.get_passwords(user_id)
-        password_entry = next((p for p in passwords if str(p['id']) == str(password_id)), None)
+        password_entry = self.db.get_password_by_id(password_id, user_id)
         
         if not password_entry:
             await self._send_error(update, "Password not found.")
@@ -207,7 +206,8 @@ class PasswordHandler:
         message = (
             "🔐 **Save New Password**\n\n"
             "Step 1/4: **Service Name**\n"
-            "Enter the name of the service (e.g., Gmail, Netflix):"
+            "Enter service/app name.\n"
+            "Example: `Gmail`, `Netflix`, `AWS Console`"
         )
         
         keyboard = [[
@@ -217,18 +217,23 @@ class PasswordHandler:
             )
         ]]
         
+        wizard_message = None
         if update.callback_query:
-            await update.callback_query.edit_message_text(
+            wizard_message = await update.callback_query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(
+            wizard_message = await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
+
+        if wizard_message:
+            self.scene_manager.set_scene_data(user.id, 'wizard_chat_id', wizard_message.chat_id)
+            self.scene_manager.set_scene_data(user.id, 'wizard_message_id', wizard_message.message_id)
 
     async def handle_wizard_input(self, update: Update):
         """Handle text input for active wizard."""
@@ -256,13 +261,15 @@ class PasswordHandler:
                 self.scene_manager.set_scene_data(user.id, 'service_name', text)
                 self.scene_manager.advance_scene(user.id)
                 
-                await update.message.reply_text(
+                await self._send_wizard_step(
+                    update,
+                    user.id,
                     f"✅ Service: **{text}**\n\n"
                     "Step 2/4: **Username/Email**\n"
-                    "Enter username (or type 'skip'):",
-                    parse_mode='Markdown',
+                    "Enter login email/username.\n"
+                    "Tip: tap Skip if not needed.",
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                        InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                     ]])
                 )
                 
@@ -277,10 +284,11 @@ class PasswordHandler:
                 self.scene_manager.set_scene_data(user.id, 'username', username)
                 self.scene_manager.advance_scene(user.id)
                 
-                await update.message.reply_text(
+                await self._send_wizard_step(
+                    update,
+                    user.id,
                     "Step 3/4: **Password**\n"
-                    "Enter the password:",
-                    parse_mode='Markdown'
+                    "Enter the password you want to store:"
                 )
                 
             elif current_step == 'password':
@@ -295,13 +303,15 @@ class PasswordHandler:
                 self.scene_manager.set_scene_data(user.id, 'password', text)
                 self.scene_manager.advance_scene(user.id)
                 
-                await update.message.reply_text(
+                await self._send_wizard_step(
+                    update,
+                    user.id,
                     f"Password Strength: {strength_msg}\n\n"
                     "Step 4/4: **Tags**\n"
-                    "Enter tags (e.g. #work) or skip:",
-                    parse_mode='Markdown',
+                    "Add tags to find it faster later.\n"
+                    "Example: `#work #finance` or tap Skip.",
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                        InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                     ]])
                 )
                 
@@ -353,16 +363,46 @@ class PasswordHandler:
         if current_step == 'username':
             self.scene_manager.set_scene_data(user.id, 'username', '')
             self.scene_manager.advance_scene(user.id)
-            await update.callback_query.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 "Step 3/4: **Password**\n"
-                "Enter the password:",
-                parse_mode='Markdown'
+                "Enter the password:"
             )
             
         elif current_step == 'tags':
             self.scene_manager.set_scene_data(user.id, 'tags', [])
             data = self.scene_manager.complete_scene(user.id)
             await self._save_password_data(update, data)
+
+    async def _send_wizard_step(self, update: Update, telegram_id: int, text: str, reply_markup=None):
+        """Edit existing wizard prompt when possible to keep chat clean."""
+        scene = self.scene_manager.get_scene(telegram_id)
+        if scene:
+            chat_id = scene.get_data('wizard_chat_id')
+            message_id = scene.get_data('wizard_message_id')
+            if chat_id and message_id:
+                try:
+                    await update.get_bot().edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
+                    )
+                    return
+                except Exception:
+                    pass
+
+        # Fallback for unexpected cases.
+        if update.message:
+            sent = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            sent = await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+        if scene and sent:
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_chat_id', sent.chat_id)
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_message_id', sent.message_id)
 
     async def _save_password_data(self, update: Update, data: dict):
         """Internal method to save password to DB."""
@@ -420,8 +460,7 @@ class PasswordHandler:
         is_auth, user_id = self._check_auth(user.id)
         
         # Get password details
-        passwords = self.db.get_passwords(user_id)
-        password_entry = next((p for p in passwords if str(p['id']) == str(password_id)), None)
+        password_entry = self.db.get_password_by_id(password_id, user_id)
         
         if not password_entry:
             await update.callback_query.answer("Password not found", show_alert=True)

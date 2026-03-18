@@ -180,6 +180,10 @@ class DatabaseManager:
         sql = "SELECT * FROM users WHERE id = %s LIMIT 1"
         return self._fetchone(sql, (user_id,))
 
+    def get_all_users(self) -> List[Dict[str, Any]]:
+        sql = "SELECT id, telegram_id, settings FROM users"
+        return self._fetchall(sql)
+
     def update_master_password(self, telegram_id: int, new_password_hash: str) -> bool:
         sql = """
         UPDATE users
@@ -242,6 +246,10 @@ class DatabaseManager:
         sql = "SELECT * FROM passwords WHERE user_id = %s ORDER BY created_at DESC"
         return self._fetchall(sql, (user_id,))
 
+    def get_password_by_id(self, password_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        sql = "SELECT * FROM passwords WHERE id = %s AND user_id = %s LIMIT 1"
+        return self._fetchone(sql, (password_id, user_id))
+
     def update_password(self, password_id: str, encrypted_password: str) -> bool:
         sql = """
         UPDATE passwords
@@ -286,6 +294,31 @@ class DatabaseManager:
 
         sql = "SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC"
         return self._fetchall(sql, (user_id,))
+
+        def get_due_soon_tasks(self, user_id: str, hours: int = 24) -> List[Dict[str, Any]]:
+                sql = """
+                SELECT *
+                FROM tasks
+                WHERE user_id = %s
+                    AND status != 'completed'
+                    AND due_date IS NOT NULL
+                    AND due_date >= NOW()
+                    AND due_date <= NOW() + (%s || ' hours')::interval
+                ORDER BY due_date ASC
+                """
+                return self._fetchall(sql, (user_id, max(1, hours)))
+
+        def get_overdue_tasks(self, user_id: str) -> List[Dict[str, Any]]:
+                sql = """
+                SELECT *
+                FROM tasks
+                WHERE user_id = %s
+                    AND status != 'completed'
+                    AND due_date IS NOT NULL
+                    AND due_date < NOW()
+                ORDER BY due_date ASC
+                """
+                return self._fetchall(sql, (user_id,))
 
     def get_task_by_id(self, task_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         sql = "SELECT * FROM tasks WHERE id = %s AND user_id = %s LIMIT 1"
@@ -346,6 +379,10 @@ class DatabaseManager:
         sql = "SELECT * FROM files WHERE user_id = %s ORDER BY created_at DESC"
         return self._fetchall(sql, (user_id,))
 
+    def get_file_by_id(self, file_id: str, user_id: str) -> Optional[Dict[str, Any]]:
+        sql = "SELECT * FROM files WHERE id = %s AND user_id = %s LIMIT 1"
+        return self._fetchone(sql, (file_id, user_id))
+
     def delete_file(self, file_id: str, user_id: str) -> bool:
         sql = "DELETE FROM files WHERE id = %s AND user_id = %s"
         return self._execute(sql, (file_id, user_id))
@@ -357,3 +394,51 @@ class DatabaseManager:
         WHERE id = %s
         """
         return self._execute(sql, (tags, file_id))
+
+    # ==================== Product/Analytics Helpers ====================
+
+    def get_user_task_overview(self, user_id: str) -> Dict[str, int]:
+        """Return fast task counters used for onboarding nudges."""
+        sql = """
+        SELECT
+            COUNT(*) FILTER (WHERE status = 'pending') AS pending,
+            COUNT(*) FILTER (WHERE status = 'in_progress') AS in_progress,
+            COUNT(*) FILTER (WHERE status = 'completed') AS completed,
+            COUNT(*) FILTER (
+                WHERE status != 'completed'
+                AND priority = 'high'
+                AND due_date IS NOT NULL
+                AND due_date < NOW()
+            ) AS overdue_high
+        FROM tasks
+        WHERE user_id = %s
+        """
+        row = self._fetchone(sql, (user_id,)) or {}
+        return {
+            "pending": int(row.get("pending", 0) or 0),
+            "in_progress": int(row.get("in_progress", 0) or 0),
+            "completed": int(row.get("completed", 0) or 0),
+            "overdue_high": int(row.get("overdue_high", 0) or 0),
+        }
+
+    def track_event(
+        self,
+        event_name: str,
+        telegram_id: Optional[int] = None,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Persist product analytics events for funnel and retention analysis."""
+        sql = """
+        INSERT INTO analytics_events (event_name, telegram_id, user_id, metadata)
+        VALUES (%s, %s, %s, %s::jsonb)
+        """
+        return self._execute(
+            sql,
+            (
+                event_name,
+                telegram_id,
+                user_id,
+                json.dumps(metadata or {}),
+            ),
+        )

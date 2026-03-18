@@ -32,7 +32,14 @@ getfile - Retrieve a file
 deletefile - Delete a file
 search - Smart search across all data
 summarize - Get AI summary of tasks
+resetmaster - Recover access if master password is forgotten
 cancel - Cancel current operation
+```
+
+Optional support command (do not expose publicly unless needed):
+
+```
+adminreset - Admin-only unlock of a user's reset lockout
 ```
 
 ## Step 2: Set Bot Description

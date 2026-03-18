@@ -74,13 +74,25 @@ class FileHandler:
         current_page_items = files[start_idx:end_idx]
         
         # Build message
-        filter_text = f" ({type_filter})" if type_filter else ""
+        filter_label = type_filter.title() if type_filter else "All"
+        filter_text = f" ({filter_label})"
         if not files:
-            message = f"📁 **No files found{filter_text}.**\n\nSend any file to the bot to save it!"
+            message = (
+                f"📁 **No Files Found{filter_text}.**\n\n"
+                "Send any file, photo, video, audio, or voice note to save it securely."
+            )
         else:
-            message = f"📁 **Your Files**{filter_text} ({len(files)} total)\n\n"
+            message = f"📁 **File Hub**{filter_text} ({len(files)} total)\n\n"
             for i, f in enumerate(current_page_items, 1):
-                icon = "🖼️" if "image" in f['file_type'] else "📄"
+                file_type = f.get('file_type', '')
+                if 'image' in file_type:
+                    icon = "🖼️"
+                elif 'video' in file_type:
+                    icon = "🎥"
+                elif 'audio' in file_type:
+                    icon = "🎵"
+                else:
+                    icon = "📄"
                 escaped_name = self._escape_markdown(f['file_name'])
                 message += f"{i}. {icon} **{escaped_name}** ({self._format_size(f['file_size'])})\n"
         
@@ -103,9 +115,14 @@ class FileHandler:
         
         # Filter buttons
         keyboard.append([
-            InlineKeyboardButton("All", callback_data=self.kb.encode_callback('file_list', p=0)),
-            InlineKeyboardButton("Images", callback_data=self.kb.encode_callback('file_list', p=0, f='image')),
-            InlineKeyboardButton("Docs", callback_data=self.kb.encode_callback('file_list', p=0, f='application'))
+            InlineKeyboardButton("📚 All", callback_data=self.kb.encode_callback('file_list', p=0)),
+            InlineKeyboardButton("🖼️ Images", callback_data=self.kb.encode_callback('file_list', p=0, f='image')),
+            InlineKeyboardButton("📄 Docs", callback_data=self.kb.encode_callback('file_list', p=0, f='application'))
+        ])
+
+        keyboard.append([
+            InlineKeyboardButton("🎥 Videos", callback_data=self.kb.encode_callback('file_list', p=0, f='video')),
+            InlineKeyboardButton("🎵 Audio", callback_data=self.kb.encode_callback('file_list', p=0, f='audio'))
         ])
         
         keyboard.append([
@@ -150,8 +167,7 @@ class FileHandler:
             return
         
         # Get file details
-        files = self.db.get_files(user_id)
-        file_entry = next((f for f in files if str(f['id']) == str(file_id)), None)
+        file_entry = self.db.get_file_by_id(file_id, user_id)
         
         if not file_entry:
             await self._send_error(update, "File not found.")
@@ -193,8 +209,7 @@ class FileHandler:
         is_auth, user_id = self._check_auth(user.id)
         
         # Get file details
-        files = self.db.get_files(user_id)
-        file_entry = next((f for f in files if str(f['id']) == str(file_id)), None)
+        file_entry = self.db.get_file_by_id(file_id, user_id)
         
         if not file_entry:
             await update.callback_query.answer("File not found", show_alert=True)
@@ -214,7 +229,7 @@ class FileHandler:
             else:
                 await update.callback_query.message.reply_document(document=tg_file_id, caption=caption)
             
-            await update.callback_query.answer("File sent!")
+            await update.callback_query.answer("✅ File sent")
         except Exception as e:
             logger.error(f"Failed to send file: {e}")
             await update.callback_query.answer("Failed to retrieve file", show_alert=True)
@@ -225,7 +240,7 @@ class FileHandler:
         is_auth, user_id = self._check_auth(user.id)
         
         if self.db.delete_file(file_id, user_id):
-            await update.callback_query.answer("File deleted")
+            await update.callback_query.answer("✅ File deleted")
             await self.show_file_list(update, 0)
         else:
             await update.callback_query.answer("Failed to delete", show_alert=True)
@@ -236,8 +251,7 @@ class FileHandler:
         is_auth, user_id = self._check_auth(user.id)
         
         # Get file details
-        files = self.db.get_files(user_id)
-        file_entry = next((f for f in files if str(f['id']) == str(file_id)), None)
+        file_entry = self.db.get_file_by_id(file_id, user_id)
         
         if not file_entry:
             await update.callback_query.answer("File not found", show_alert=True)
@@ -257,7 +271,7 @@ class FileHandler:
             else:
                 await update.callback_query.message.reply_document(document=tg_file_id, caption=caption)
             
-            await update.callback_query.answer("File shared!")
+            await update.callback_query.answer("✅ File shared")
         except Exception as e:
             logger.error(f"Failed to share file: {e}")
             await update.callback_query.answer("Failed to share file", show_alert=True)
@@ -267,7 +281,7 @@ class FileHandler:
         is_auth, user_id = self._check_auth(update.effective_user.id)
         
         if not is_auth:
-            await update.message.reply_text("❌ Please /start and authenticate first.")
+            await update.message.reply_text("❌ Please authenticate first with /start.")
             return
         
         # Get file from message
@@ -326,7 +340,7 @@ class FileHandler:
             escaped_tags = [self._escape_markdown(t) for t in tags]
             
             msg = (
-                f"✅ **File Saved!**\n\n"
+                f"✅ **File Saved Successfully**\n\n"
                 f"📎 {escaped_name}\n"
                 f"Size: {self._format_size(file_size)}\n"
                 f"Tags: {', '.join(escaped_tags) if escaped_tags else 'None'}"
@@ -338,7 +352,7 @@ class FileHandler:
                     callback_data=self.kb.encode_callback('file_list', p=0)
                 ),
                 InlineKeyboardButton(
-                    f"{self.kb.EMOJI['add']} Upload Another",
+                    f"{self.kb.EMOJI['add']} Upload More",
                     callback_data=self.kb.encode_callback('quick_upload_file')
                 )
             ]]
@@ -385,17 +399,31 @@ class FileHandler:
     
     async def list_files(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy list files."""
+        is_auth, _ = self._check_auth(update.effective_user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
         await self.show_file_list(update)
 
     async def get_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy get file."""
+        is_auth, _ = self._check_auth(update.effective_user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
         # Redirect to list view as getting by name is hard to map to ID in new UI
-        await update.message.reply_text("Please use the 'Download' button in the file list.")
+        await update.message.reply_text("Use the 'Download' button from File Hub to get any file.")
         await self.show_file_list(update)
 
     async def delete_file_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy delete file."""
-        await update.message.reply_text("Please use the 'Delete' button in the file list.")
+        is_auth, _ = self._check_auth(update.effective_user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        await update.message.reply_text("Use the 'Delete' button from File Hub to remove a file.")
         await self.show_file_list(update)
 
     def _escape_markdown(self, text: str) -> str:

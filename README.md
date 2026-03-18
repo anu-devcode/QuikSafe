@@ -93,6 +93,11 @@ An AI-integrated Telegram bot designed to securely save, organize, and manage pa
 3. Create a master password when prompted
 4. You're ready to use QuikSafe Bot!
 
+### UI-First Experience
+- Use dashboard quick actions instead of memorizing commands
+- Type simple intents like `add task`, `save password`, or `files` for smart routing
+- Multi-step wizards keep a single clean bot message (less chat clutter)
+
 ### Commands
 
 #### Password Management
@@ -117,6 +122,10 @@ An AI-integrated Telegram bot designed to securely save, organize, and manage pa
 - `/search <query>` - Smart search across all data
 - `/summarize` - Get AI summary of your tasks
 
+#### Account Recovery
+- `/resetmaster` - Securely recover your account if you forgot the master password
+- `/adminreset <telegram_id>` - Admin-only unlock for reset flow (requires SUPPORT_ADMIN_TELEGRAM_IDS)
+
 ## Security Features
 
 - **End-to-end encryption**: All sensitive data encrypted with AES-256
@@ -124,6 +133,16 @@ An AI-integrated Telegram bot designed to securely save, organize, and manage pa
 - **Secure key management**: Encryption keys stored in environment variables
 - **No plaintext storage**: Passwords, tasks, and sensitive file metadata always encrypted
 - **Session management**: Secure user authentication and session handling
+- **Secure recovery flow**: OTP-based master password reset with expiry, cooldown, and attempt limits
+
+## Product Analytics
+
+QuikSafe tracks product events in `analytics_events` for onboarding and retention optimization:
+- onboarding start/login/register prompts
+- auth success/failure
+- callback action clicks
+- blocked unauthenticated actions
+- unhandled runtime errors
 
 ## Project Structure
 

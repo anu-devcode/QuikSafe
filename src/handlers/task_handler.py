@@ -208,7 +208,8 @@ class TaskHandler:
         message = (
             "✅ **Add New Task**\n\n"
             "Step 1/4: **Task Description**\n"
-            "What needs to be done?"
+            "What needs to be done?\n"
+            "Example: `Finish Q1 report draft`"
         )
         
         keyboard = [[
@@ -218,18 +219,23 @@ class TaskHandler:
             )
         ]]
         
+        wizard_message = None
         if update.callback_query:
-            await update.callback_query.edit_message_text(
+            wizard_message = await update.callback_query.edit_message_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(
+            wizard_message = await update.message.reply_text(
                 message,
                 reply_markup=InlineKeyboardMarkup(keyboard),
                 parse_mode='Markdown'
             )
+
+        if wizard_message:
+            self.scene_manager.set_scene_data(user.id, 'wizard_chat_id', wizard_message.chat_id)
+            self.scene_manager.set_scene_data(user.id, 'wizard_message_id', wizard_message.message_id)
 
     async def handle_wizard_input(self, update: Update):
         """Handle text input for active wizard."""
@@ -259,11 +265,12 @@ class TaskHandler:
             self.scene_manager.set_scene_data(user.id, 'content', text)
             self.scene_manager.advance_scene(user.id)
             
-            await update.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 f"✅ Task: **{text}**\n\n"
                 "Step 2/4: **Priority**\n"
-                "Select priority:",
-                parse_mode='Markdown',
+                "Select a priority (Low, Medium, High):",
                 reply_markup=self.kb.priority_selector()
             )
             
@@ -277,12 +284,13 @@ class TaskHandler:
             self.scene_manager.set_scene_data(user.id, 'priority', text.lower())
             self.scene_manager.advance_scene(user.id)
             
-            await update.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 "Step 3/4: **Due Date**\n"
-                "Enter date (YYYY-MM-DD) or skip:",
-                parse_mode='Markdown',
+                "Enter date as YYYY-MM-DD, or tap Skip.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                    InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                 ]])
             )
             
@@ -298,12 +306,14 @@ class TaskHandler:
             self.scene_manager.set_scene_data(user.id, 'due_date', due_date)
             self.scene_manager.advance_scene(user.id)
             
-            await update.message.reply_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 "Step 4/4: **Tags**\n"
-                "Enter tags (e.g. #work) or skip:",
-                parse_mode='Markdown',
+                "Add optional tags for grouping.\n"
+                "Example: `#work #urgent`, or tap Skip.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                    InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                 ]])
             )
             
@@ -331,13 +341,14 @@ class TaskHandler:
             self.scene_manager.set_scene_data(user.id, 'priority', priority)
             self.scene_manager.advance_scene(user.id)
             
-            await update.callback_query.edit_message_text(
+            await self._send_wizard_step(
+                update,
+                user.id,
                 f"Priority: {priority.capitalize()}\n\n"
                 "Step 3/4: **Due Date**\n"
-                "Enter date (YYYY-MM-DD) or skip:",
-                parse_mode='Markdown',
+                "Enter date as YYYY-MM-DD, or tap Skip.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                    InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                 ]])
             )
             
@@ -345,18 +356,48 @@ class TaskHandler:
             if current_step == 'due_date':
                 self.scene_manager.set_scene_data(user.id, 'due_date', None)
                 self.scene_manager.advance_scene(user.id)
-                await update.callback_query.edit_message_text(
+                await self._send_wizard_step(
+                    update,
+                    user.id,
                     "Step 4/4: **Tags**\n"
-                    "Enter tags (e.g. #work) or skip:",
-                    parse_mode='Markdown',
+                    "Add optional tags for grouping.\n"
+                    "Example: `#work #urgent`, or tap Skip.",
                     reply_markup=InlineKeyboardMarkup([[
-                        InlineKeyboardButton("Skip", callback_data=self.kb.encode_callback('wizard_skip'))
+                        InlineKeyboardButton("⏭ Skip", callback_data=self.kb.encode_callback('wizard_skip'))
                     ]])
                 )
             elif current_step == 'tags':
                 self.scene_manager.set_scene_data(user.id, 'tags', [])
                 data = self.scene_manager.complete_scene(user.id)
                 await self._save_task_data(update, data)
+
+    async def _send_wizard_step(self, update: Update, telegram_id: int, text: str, reply_markup=None):
+        """Edit existing wizard prompt when possible to keep chat clean."""
+        scene = self.scene_manager.get_scene(telegram_id)
+        if scene:
+            chat_id = scene.get_data('wizard_chat_id')
+            message_id = scene.get_data('wizard_message_id')
+            if chat_id and message_id:
+                try:
+                    await update.get_bot().edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode='Markdown'
+                    )
+                    return
+                except Exception:
+                    pass
+
+        if update.message:
+            sent = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        else:
+            sent = await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+
+        if scene and sent:
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_chat_id', sent.chat_id)
+            self.scene_manager.set_scene_data(telegram_id, 'wizard_message_id', sent.message_id)
 
     async def _save_task_data(self, update: Update, data: dict):
         """Internal method to save task to DB."""
