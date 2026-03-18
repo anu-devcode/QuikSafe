@@ -1,433 +1,359 @@
 """
 QuikSafe Bot - Database Manager
-Handles all database operations with Supabase PostgreSQL.
+Handles all database operations with PostgreSQL.
 """
 
-from supabase import create_client, Client
-from typing import Optional, List, Dict, Any
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+import json
 import logging
+import uuid
+
+from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
     """Manages all database operations for QuikSafe Bot."""
-    
-    def __init__(self, supabase_url: str, supabase_key: str):
+
+    def __init__(
+        self,
+        database_url: str,
+        min_pool_size: int = 1,
+        max_pool_size: int = 10,
+        connect_timeout: int = 10,
+    ):
         """
-        Initialize database connection.
-        
+        Initialize PostgreSQL connection pool.
+
         Args:
-            supabase_url: Supabase project URL
-            supabase_key: Supabase API key
+            database_url: PostgreSQL connection URL
+            min_pool_size: Minimum pooled connections
+            max_pool_size: Maximum pooled connections
+            connect_timeout: Connection timeout in seconds
         """
+        if not database_url:
+            raise ValueError("DATABASE_URL is required")
+
+        self.database_url = database_url
+        self.pool = ConnectionPool(
+            conninfo=database_url,
+            min_size=max(1, min_pool_size),
+            max_size=max(max_pool_size, min_pool_size),
+            kwargs={
+                "connect_timeout": connect_timeout,
+                "row_factory": dict_row,
+            },
+            open=True,
+        )
+        logger.info("PostgreSQL connection pool established")
+
+    def initialize_database(self):
+        """Apply schema and SQL migrations on startup."""
+        logger.info("Initializing database schema and migrations")
+        self._apply_schema_file()
+        self._ensure_migrations_table()
+        self._apply_migrations()
+        logger.info("Database initialization completed")
+
+    # ==================== Bootstrap ====================
+
+    def _apply_schema_file(self):
+        schema_path = Path(__file__).resolve().parent / "schema.sql"
+        schema_sql = schema_path.read_text(encoding="utf-8")
+
+        with self.pool.connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(schema_sql)
+            conn.commit()
+
+    def _ensure_migrations_table(self):
+        sql = """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            name TEXT PRIMARY KEY,
+            applied_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        """
+        self._execute(sql)
+
+    def _apply_migrations(self):
+        migrations_dir = Path(__file__).resolve().parent / "migrations"
+        if not migrations_dir.exists():
+            return
+
+        migration_files = sorted(migrations_dir.glob("*.sql"))
+        if not migration_files:
+            return
+
+        applied = {row["name"] for row in self._fetchall("SELECT name FROM schema_migrations")}
+
+        for file_path in migration_files:
+            migration_name = file_path.name
+            if migration_name in applied:
+                continue
+
+            sql = file_path.read_text(encoding="utf-8")
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql)
+                    cur.execute(
+                        "INSERT INTO schema_migrations (name) VALUES (%s)",
+                        (migration_name,),
+                    )
+                conn.commit()
+            logger.info(f"Applied migration: {migration_name}")
+
+    # ==================== Core SQL Helpers ====================
+
+    def _execute(self, sql: str, params: tuple = ()) -> bool:
         try:
-            self.client: Client = create_client(supabase_url, supabase_key)
-            logger.info("Database connection established")
-        except Exception as e:
-            logger.error(f"Failed to connect to database: {e}")
-            raise
-    
-    # ==================== User Operations ====================
-    
-    def create_user(self, telegram_id: int, master_password_hash: str) -> Optional[Dict[str, Any]]:
-        """
-        Create a new user.
-        
-        Args:
-            telegram_id: Telegram user ID
-            master_password_hash: Hashed master password
-            
-        Returns:
-            Created user data or None if failed
-        """
-        try:
-            result = self.client.table('users').insert({
-                'telegram_id': telegram_id,
-                'master_password_hash': master_password_hash
-            }).execute()
-            
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to create user: {e}")
-            return None
-    
-    def get_user_by_telegram_id(self, telegram_id: int) -> Optional[Dict[str, Any]]:
-        """
-        Get user by Telegram ID.
-        
-        Args:
-            telegram_id: Telegram user ID
-            
-        Returns:
-            User data or None if not found
-        """
-        try:
-            result = self.client.table('users').select('*').eq('telegram_id', telegram_id).execute()
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to get user: {e}")
-            return None
-    
-    def update_master_password(self, telegram_id: int, new_password_hash: str) -> bool:
-        """
-        Update user's master password.
-        
-        Args:
-            telegram_id: Telegram user ID
-            new_password_hash: New hashed password
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('users').update({
-                'master_password_hash': new_password_hash
-            }).eq('telegram_id', telegram_id).execute()
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                conn.commit()
             return True
         except Exception as e:
-            logger.error(f"Failed to update master password: {e}")
+            logger.error(f"SQL execution failed: {e}")
             return False
+
+    def _fetchone(self, sql: str, params: tuple = ()) -> Optional[Dict[str, Any]]:
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    row = cur.fetchone()
+            return self._normalize_row(row) if row else None
+        except Exception as e:
+            logger.error(f"SQL fetchone failed: {e}")
+            return None
+
+    def _fetchall(self, sql: str, params: tuple = ()) -> List[Dict[str, Any]]:
+        try:
+            with self.pool.connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(sql, params)
+                    rows = cur.fetchall()
+            return [self._normalize_row(row) for row in rows]
+        except Exception as e:
+            logger.error(f"SQL fetchall failed: {e}")
+            return []
+
+    def _normalize_row(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        normalized: Dict[str, Any] = {}
+        for key, value in row.items():
+            normalized[key] = self._normalize_value(value)
+        return normalized
+
+    def _normalize_value(self, value: Any) -> Any:
+        if isinstance(value, uuid.UUID):
+            return str(value)
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                value = value.replace(tzinfo=timezone.utc)
+            return value.isoformat()
+        if isinstance(value, list):
+            return [self._normalize_value(v) for v in value]
+        if isinstance(value, dict):
+            return {k: self._normalize_value(v) for k, v in value.items()}
+        return value
+
+    # ==================== User Operations ====================
+
+    def create_user(self, telegram_id: int, master_password_hash: str) -> Optional[Dict[str, Any]]:
+        sql = """
+        INSERT INTO users (telegram_id, master_password_hash)
+        VALUES (%s, %s)
+        RETURNING *;
+        """
+        return self._fetchone(sql, (telegram_id, master_password_hash))
+
+    def get_user_by_telegram_id(self, telegram_id: int) -> Optional[Dict[str, Any]]:
+        sql = "SELECT * FROM users WHERE telegram_id = %s LIMIT 1"
+        return self._fetchone(sql, (telegram_id,))
+
+    def get_user_by_id(self, user_id: str) -> Optional[Dict[str, Any]]:
+        sql = "SELECT * FROM users WHERE id = %s LIMIT 1"
+        return self._fetchone(sql, (user_id,))
+
+    def update_master_password(self, telegram_id: int, new_password_hash: str) -> bool:
+        sql = """
+        UPDATE users
+        SET master_password_hash = %s, updated_at = NOW()
+        WHERE telegram_id = %s
+        """
+        return self._execute(sql, (new_password_hash, telegram_id))
+
+    def update_master_password_by_user_id(self, user_id: str, new_password_hash: str) -> bool:
+        sql = """
+        UPDATE users
+        SET master_password_hash = %s, updated_at = NOW()
+        WHERE id = %s
+        """
+        return self._execute(sql, (new_password_hash, user_id))
 
     def get_user_settings(self, user_id: str) -> Dict[str, Any]:
-        """
-        Get user settings.
-        
-        Args:
-            user_id: User UUID
-            
-        Returns:
-            User settings dictionary
-        """
-        try:
-            result = self.client.table('users').select('settings').eq('id', user_id).execute()
-            if result.data and result.data[0].get('settings'):
-                return result.data[0]['settings']
-            return {}
-        except Exception as e:
-            logger.error(f"Failed to get user settings: {e}")
-            return {}
+        sql = "SELECT settings FROM users WHERE id = %s LIMIT 1"
+        row = self._fetchone(sql, (user_id,))
+        return row.get("settings", {}) if row else {}
 
     def update_user_settings(self, user_id: str, settings: Dict[str, Any]) -> bool:
+        sql = """
+        UPDATE users
+        SET settings = %s::jsonb, updated_at = NOW()
+        WHERE id = %s
         """
-        Update user settings.
-        
-        Args:
-            user_id: User UUID
-            settings: New settings dictionary
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('users').update({
-                'settings': settings
-            }).eq('id', user_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update user settings: {e}")
-            return False
-    
+        return self._execute(sql, (json.dumps(settings), user_id))
+
     # ==================== Password Operations ====================
-    
-    def save_password(self, user_id: str, service_name: str, encrypted_username: str,
-                     encrypted_password: str, tags: List[str] = None, notes: str = None) -> Optional[Dict[str, Any]]:
+
+    def save_password(
+        self,
+        user_id: str,
+        service_name: str,
+        encrypted_username: str,
+        encrypted_password: str,
+        tags: List[str] = None,
+        notes: str = None,
+    ) -> Optional[Dict[str, Any]]:
+        sql = """
+        INSERT INTO passwords (user_id, service_name, encrypted_username, encrypted_password, tags, notes)
+        VALUES (%s, %s, %s, %s, %s, %s)
+        RETURNING *;
         """
-        Save a new password entry.
-        
-        Args:
-            user_id: User UUID
-            service_name: Name of the service
-            encrypted_username: Encrypted username
-            encrypted_password: Encrypted password
-            tags: Optional list of tags
-            notes: Optional encrypted notes
-            
-        Returns:
-            Created password entry or None if failed
-        """
-        try:
-            result = self.client.table('passwords').insert({
-                'user_id': user_id,
-                'service_name': service_name,
-                'encrypted_username': encrypted_username,
-                'encrypted_password': encrypted_password,
-                'tags': tags or [],
-                'notes': notes
-            }).execute()
-            
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to save password: {e}")
-            return None
-    
+        return self._fetchone(
+            sql,
+            (user_id, service_name, encrypted_username, encrypted_password, tags or [], notes),
+        )
+
     def get_passwords(self, user_id: str, service_name: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get password entries for a user.
-        
-        Args:
-            user_id: User UUID
-            service_name: Optional service name filter
-            
-        Returns:
-            List of password entries
-        """
-        try:
-            query = self.client.table('passwords').select('*').eq('user_id', user_id)
-            
-            if service_name:
-                query = query.ilike('service_name', f'%{service_name}%')
-            
-            result = query.order('created_at', desc=True).execute()
-            return result.data if result.data else []
-        except Exception as e:
-            logger.error(f"Failed to get passwords: {e}")
-            return []
-    
+        if service_name:
+            sql = """
+            SELECT * FROM passwords
+            WHERE user_id = %s AND service_name ILIKE %s
+            ORDER BY created_at DESC
+            """
+            return self._fetchall(sql, (user_id, f"%{service_name}%"))
+
+        sql = "SELECT * FROM passwords WHERE user_id = %s ORDER BY created_at DESC"
+        return self._fetchall(sql, (user_id,))
+
     def update_password(self, password_id: str, encrypted_password: str) -> bool:
+        sql = """
+        UPDATE passwords
+        SET encrypted_password = %s, updated_at = NOW()
+        WHERE id = %s
         """
-        Update password value.
-        
-        Args:
-            password_id: Password entry UUID
-            encrypted_password: New encrypted password
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('passwords').update({
-                'encrypted_password': encrypted_password
-            }).eq('id', password_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update password: {e}")
-            return False
+        return self._execute(sql, (encrypted_password, password_id))
 
     def delete_password(self, password_id: str, user_id: str) -> bool:
-        """
-        Delete a password entry.
-        
-        Args:
-            password_id: Password entry UUID
-            user_id: User UUID (for security)
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('passwords').delete().eq('id', password_id).eq('user_id', user_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete password: {e}")
-            return False
+        sql = "DELETE FROM passwords WHERE id = %s AND user_id = %s"
+        return self._execute(sql, (password_id, user_id))
 
     def update_password_tags(self, password_id: str, tags: List[str]) -> bool:
+        sql = """
+        UPDATE passwords
+        SET tags = %s, updated_at = NOW()
+        WHERE id = %s
         """
-        Update tags for a password entry.
-        
-        Args:
-            password_id: Password entry UUID
-            tags: List of tags
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('passwords').update({
-                'tags': tags
-            }).eq('id', password_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update password tags: {e}")
-            return False
-    
+        return self._execute(sql, (tags, password_id))
+
     # ==================== Task Operations ====================
-    
-    def create_task(self, user_id: str, encrypted_content: str, priority: str = 'medium',
-                   due_date: Optional[datetime] = None, tags: List[str] = None) -> Optional[Dict[str, Any]]:
+
+    def create_task(
+        self,
+        user_id: str,
+        encrypted_content: str,
+        priority: str = "medium",
+        due_date: Optional[datetime] = None,
+        tags: List[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        sql = """
+        INSERT INTO tasks (user_id, encrypted_content, priority, due_date, tags)
+        VALUES (%s, %s, %s, %s, %s)
+        RETURNING *;
         """
-        Create a new task.
-        
-        Args:
-            user_id: User UUID
-            encrypted_content: Encrypted task content
-            priority: Task priority (low, medium, high)
-            due_date: Optional due date
-            tags: Optional list of tags
-            
-        Returns:
-            Created task or None if failed
-        """
-        try:
-            result = self.client.table('tasks').insert({
-                'user_id': user_id,
-                'encrypted_content': encrypted_content,
-                'priority': priority,
-                'due_date': due_date.isoformat() if due_date else None,
-                'tags': tags or []
-            }).execute()
-            
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to create task: {e}")
-            return None
-    
+        return self._fetchone(sql, (user_id, encrypted_content, priority, due_date, tags or []))
+
     def get_tasks(self, user_id: str, status: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get tasks for a user.
-        
-        Args:
-            user_id: User UUID
-            status: Optional status filter (pending, in_progress, completed)
-            
-        Returns:
-            List of tasks
-        """
-        try:
-            query = self.client.table('tasks').select('*').eq('user_id', user_id)
-            
-            if status:
-                query = query.eq('status', status)
-            
-            result = query.order('created_at', desc=True).execute()
-            return result.data if result.data else []
-        except Exception as e:
-            logger.error(f"Failed to get tasks: {e}")
-            return []
+        if status:
+            sql = "SELECT * FROM tasks WHERE user_id = %s AND status = %s ORDER BY created_at DESC"
+            return self._fetchall(sql, (user_id, status))
+
+        sql = "SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC"
+        return self._fetchall(sql, (user_id,))
 
     def get_task_by_id(self, task_id: str, user_id: str) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific task by ID.
-        
-        Args:
-            task_id: Task UUID
-            user_id: User UUID (for security)
-            
-        Returns:
-            Task data or None if not found
-        """
-        try:
-            result = self.client.table('tasks').select('*').eq('id', task_id).eq('user_id', user_id).execute()
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to get task: {e}")
-            return None
-    
+        sql = "SELECT * FROM tasks WHERE id = %s AND user_id = %s LIMIT 1"
+        return self._fetchone(sql, (task_id, user_id))
+
     def update_task_status(self, task_id: str, user_id: str, status: str) -> bool:
+        completed_at = datetime.now(timezone.utc) if status == "completed" else None
+        sql = """
+        UPDATE tasks
+        SET status = %s, completed_at = %s, updated_at = NOW()
+        WHERE id = %s AND user_id = %s
         """
-        Update task status.
-        
-        Args:
-            task_id: Task UUID
-            user_id: User UUID (for security)
-            status: New status
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            update_data = {'status': status}
-            if status == 'completed':
-                update_data['completed_at'] = datetime.now().isoformat()
-            
-            self.client.table('tasks').update(update_data).eq('id', task_id).eq('user_id', user_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to update task status: {e}")
-            return False
-    
+        return self._execute(sql, (status, completed_at, task_id, user_id))
+
     def delete_task(self, task_id: str, user_id: str) -> bool:
+        sql = "DELETE FROM tasks WHERE id = %s AND user_id = %s"
+        return self._execute(sql, (task_id, user_id))
+
+    def update_task_tags(self, task_id: str, tags: List[str]) -> bool:
+        sql = """
+        UPDATE tasks
+        SET tags = %s, updated_at = NOW()
+        WHERE id = %s
         """
-        Delete a task.
-        
-        Args:
-            task_id: Task UUID
-            user_id: User UUID (for security)
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('tasks').delete().eq('id', task_id).eq('user_id', user_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete task: {e}")
-            return False
-    
+        return self._execute(sql, (tags, task_id))
+
     # ==================== File Operations ====================
-    
-    def save_file(self, user_id: str, file_id: str, file_name: str, file_type: str,
-                 file_size: int, encrypted_description: str = None, tags: List[str] = None) -> Optional[Dict[str, Any]]:
+
+    def save_file(
+        self,
+        user_id: str,
+        file_id: str,
+        file_name: str,
+        file_type: str,
+        file_size: int,
+        encrypted_description: str = None,
+        tags: List[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        sql = """
+        INSERT INTO files (user_id, file_id, file_name, file_type, file_size, encrypted_description, tags)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING *;
         """
-        Save file metadata.
-        
-        Args:
-            user_id: User UUID
-            file_id: Telegram file ID
-            file_name: Original file name
-            file_type: MIME type
-            file_size: File size in bytes
-            encrypted_description: Optional encrypted description
-            tags: Optional list of tags
-            
-        Returns:
-            Created file entry or None if failed
-        """
-        try:
-            result = self.client.table('files').insert({
-                'user_id': user_id,
-                'file_id': file_id,
-                'file_name': file_name,
-                'file_type': file_type,
-                'file_size': file_size,
-                'encrypted_description': encrypted_description,
-                'tags': tags or []
-            }).execute()
-            
-            return result.data[0] if result.data else None
-        except Exception as e:
-            logger.error(f"Failed to save file: {e}")
-            return None
-    
+        return self._fetchone(
+            sql,
+            (user_id, file_id, file_name, file_type, file_size, encrypted_description, tags or []),
+        )
+
     def get_files(self, user_id: str, file_name: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get files for a user.
-        
-        Args:
-            user_id: User UUID
-            file_name: Optional file name filter
-            
-        Returns:
-            List of files
-        """
-        try:
-            query = self.client.table('files').select('*').eq('user_id', user_id)
-            
-            if file_name:
-                query = query.ilike('file_name', f'%{file_name}%')
-            
-            result = query.order('created_at', desc=True).execute()
-            return result.data if result.data else []
-        except Exception as e:
-            logger.error(f"Failed to get files: {e}")
-            return []
-    
+        if file_name:
+            sql = """
+            SELECT * FROM files
+            WHERE user_id = %s AND file_name ILIKE %s
+            ORDER BY created_at DESC
+            """
+            return self._fetchall(sql, (user_id, f"%{file_name}%"))
+
+        sql = "SELECT * FROM files WHERE user_id = %s ORDER BY created_at DESC"
+        return self._fetchall(sql, (user_id,))
+
     def delete_file(self, file_id: str, user_id: str) -> bool:
+        sql = "DELETE FROM files WHERE id = %s AND user_id = %s"
+        return self._execute(sql, (file_id, user_id))
+
+    def update_file_tags(self, file_id: str, tags: List[str]) -> bool:
+        sql = """
+        UPDATE files
+        SET tags = %s, updated_at = NOW()
+        WHERE id = %s
         """
-        Delete a file entry.
-        
-        Args:
-            file_id: File entry UUID
-            user_id: User UUID (for security)
-            
-        Returns:
-            True if successful, False otherwise
-        """
-        try:
-            self.client.table('files').delete().eq('id', file_id).eq('user_id', user_id).execute()
-            return True
-        except Exception as e:
-            logger.error(f"Failed to delete file: {e}")
-            return False
+        return self._execute(sql, (tags, file_id))

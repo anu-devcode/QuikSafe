@@ -18,19 +18,18 @@ class Config:
     TELEGRAM_BOT_TOKEN: str = os.getenv('TELEGRAM_BOT_TOKEN', '')
     BOT_USERNAME: str = os.getenv('BOT_USERNAME', 'QuikSafeBot')
     
-    # Supabase Configuration
-    SUPABASE_URL: str = os.getenv('SUPABASE_URL', '')
-    SUPABASE_KEY: str = os.getenv('SUPABASE_KEY', '')
+    # Database Configuration (Coolify-managed PostgreSQL)
+    DATABASE_URL: str = os.getenv('DATABASE_URL', '')
+    DB_POOL_MIN_SIZE: int = int(os.getenv('DB_POOL_MIN_SIZE', '1'))
+    DB_POOL_MAX_SIZE: int = int(os.getenv('DB_POOL_MAX_SIZE', '10'))
+    DB_CONNECT_TIMEOUT: int = int(os.getenv('DB_CONNECT_TIMEOUT', '10'))
+    DB_RUN_MIGRATIONS_ON_STARTUP: bool = os.getenv('DB_RUN_MIGRATIONS_ON_STARTUP', 'true').lower() == 'true'
     
     # AI Configuration
-    GEMINI_API_KEY: str = os.getenv('GEMINI_API_KEY', '')
+    HUGGINGFACE_API_KEY: str = os.getenv('HUGGINGFACE_API_KEY', os.getenv('HF_API_TOKEN', ''))
     
     # Security Configuration
     ENCRYPTION_KEY: str = os.getenv('ENCRYPTION_KEY', '')
-    
-    # Storage Configuration
-    USE_SUPABASE_STORAGE: bool = os.getenv('USE_SUPABASE_STORAGE', 'false').lower() == 'true'
-    SUPABASE_STORAGE_BUCKET: str = os.getenv('SUPABASE_STORAGE_BUCKET', 'quiksafe-files')
     
     # Bot Configuration
     DEBUG_MODE: bool = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
@@ -46,15 +45,11 @@ class Config:
         if not cls.TELEGRAM_BOT_TOKEN:
             return False, "TELEGRAM_BOT_TOKEN is required"
         
-        # Supabase is optional for now - can be added later
-        # if not cls.SUPABASE_URL:
-        #     return False, "SUPABASE_URL is required"
+        if not cls.DATABASE_URL:
+            return False, "DATABASE_URL is required"
         
-        # if not cls.SUPABASE_KEY:
-        #     return False, "SUPABASE_KEY is required"
-        
-        if not cls.GEMINI_API_KEY:
-            return False, "GEMINI_API_KEY is required"
+        if not cls.HUGGINGFACE_API_KEY:
+            return False, "HUGGINGFACE_API_KEY is required"
         
         if not cls.ENCRYPTION_KEY:
             return False, "ENCRYPTION_KEY is required"
@@ -70,10 +65,11 @@ class Config:
         """Get configuration info for debugging (without sensitive data)."""
         return {
             'bot_username': cls.BOT_USERNAME,
-            'supabase_configured': bool(cls.SUPABASE_URL),
-            'gemini_configured': bool(cls.GEMINI_API_KEY),
+            'database_configured': bool(cls.DATABASE_URL),
+            'huggingface_configured': bool(cls.HUGGINGFACE_API_KEY),
             'encryption_configured': bool(cls.ENCRYPTION_KEY),
-            'use_supabase_storage': cls.USE_SUPABASE_STORAGE,
+            'db_pool_min_size': cls.DB_POOL_MIN_SIZE,
+            'db_pool_max_size': cls.DB_POOL_MAX_SIZE,
             'debug_mode': cls.DEBUG_MODE
         }
 

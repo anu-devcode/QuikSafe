@@ -8,7 +8,7 @@ from telegram import Update
 from src.config import Config
 from src.database import DatabaseManager
 from src.security import EncryptionManager, AuthManager, SessionManager
-from src.ai import GeminiClient
+from src.ai import HuggingFaceClient
 from src.handlers import (
     StartHandler,
     help_command,
@@ -46,23 +46,19 @@ def main():
     
     # Initialize components
     try:
-        # Check if Supabase is configured
-        if Config.SUPABASE_URL == 'your_supabase_project_url' or not Config.SUPABASE_URL:
-            logger.warning("⚠️  Supabase is not configured yet!")
-            logger.warning("The bot will not function properly without a database.")
-            logger.warning("Please set up Supabase and update your .env file:")
-            logger.warning("  1. Create a Supabase project at https://supabase.com")
-            logger.warning("  2. Run the schema from src/database/schema.sql")
-            logger.warning("  3. Update SUPABASE_URL and SUPABASE_KEY in .env")
-            logger.warning("")
-            logger.warning("Press Ctrl+C to stop the bot.")
-            return
-        
-        db = DatabaseManager(Config.SUPABASE_URL, Config.SUPABASE_KEY)
+        db = DatabaseManager(
+            Config.DATABASE_URL,
+            min_pool_size=Config.DB_POOL_MIN_SIZE,
+            max_pool_size=Config.DB_POOL_MAX_SIZE,
+            connect_timeout=Config.DB_CONNECT_TIMEOUT,
+        )
+        if Config.DB_RUN_MIGRATIONS_ON_STARTUP:
+            db.initialize_database()
+
         encryption = EncryptionManager(Config.ENCRYPTION_KEY)
         auth = AuthManager()
         session = SessionManager()
-        ai_client = GeminiClient(Config.GEMINI_API_KEY)
+        ai_client = HuggingFaceClient(Config.HUGGINGFACE_API_KEY)
         scene_manager = SceneManager()
         
         logger.info("All components initialized successfully")

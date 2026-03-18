@@ -116,8 +116,7 @@ class SceneManager:
                 'service_name',
                 'username',
                 'password',
-                'tags',
-                'confirm'
+                'tags'
             ],
             
             # Task wizard
@@ -125,17 +124,20 @@ class SceneManager:
                 'content',
                 'priority',
                 'due_date',
-                'tags',
-                'confirm'
+                'tags'
             ],
             
+            # Settings wizard
+            'change_password': [
+                'current_password',
+                'new_password',
+                'confirm_password'
+            ],
 
             
             # Edit password wizard
             'edit_password': [
-                'select_field',
-                'new_value',
-                'confirm'
+                'new_password'
             ],
             
 

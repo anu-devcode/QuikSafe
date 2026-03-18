@@ -8,7 +8,7 @@ from telegram.ext import ContextTypes, CommandHandler
 from src.database.db_manager import DatabaseManager
 from src.security.encryption import EncryptionManager
 from src.security.auth import SessionManager
-from src.ai.gemini_client import GeminiClient
+from src.ai.huggingface_client import HuggingFaceClient
 from src.utils.keyboard_builder import KeyboardBuilder
 import logging
 
@@ -19,7 +19,7 @@ class SearchHandler:
     """Handles AI-powered search and summarization."""
     
     def __init__(self, db: DatabaseManager, encryption: EncryptionManager, 
-                 session: SessionManager, ai_client: GeminiClient):
+                 session: SessionManager, ai_client: HuggingFaceClient):
         """Initialize search handler."""
         self.db = db
         self.encryption = encryption

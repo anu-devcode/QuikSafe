@@ -165,7 +165,7 @@ After completing the setup:
 If you encounter issues:
 1. Check the bot logs for errors
 2. Verify all environment variables are set correctly
-3. Ensure Supabase database is properly configured
+3. Ensure PostgreSQL database is properly configured
 4. Test with `/start` command first
 
 ---

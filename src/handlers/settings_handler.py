@@ -105,7 +105,7 @@ class SettingsHandler:
     async def handle_logout(self, update: Update):
         """Handle logout action."""
         user = update.effective_user
-        self.session.logout(user.id)
+        self.session.delete_session(user.id)
         
         await update.callback_query.edit_message_text(
             "👋 **Logged Out**\n\n"
@@ -253,7 +253,10 @@ class SettingsHandler:
             await self._send_auth_error(update)
             return
             
-        self.scene_manager.start_scene(user.id, 'change_password')
+        scene = self.scene_manager.start_scene(user.id, 'change_password')
+        if scene is None:
+            await self._send_error(update, "Password change flow is not available right now.")
+            return
         
         message = (
             "🔑 **Change Master Password**\n\n"
@@ -303,16 +306,12 @@ class SettingsHandler:
         if current_step == 'current_password':
             # Verify current password
             is_auth, user_id = self._check_auth(user.id)
-            user_data = self.db.get_user(user.id) # Need to get by telegram_id or user_id
-            # Wait, get_user takes telegram_id usually? Let's check db_manager.
-            # Assuming get_user_by_telegram_id or similar. 
-            # Actually session has user_id. Let's use that.
-            # But we need the hash from DB.
-            # Let's assume db.get_user_by_id(user_id) exists or similar.
-            # Checking db_manager.py... it has get_user(telegram_id).
-            
-            db_user = self.db.get_user(user.id)
-            if not db_user or not self.auth.verify_password(text, db_user['password_hash']):
+            if not is_auth or not user_id:
+                await self._send_auth_error(update)
+                return True
+
+            db_user = self.db.get_user_by_id(user_id)
+            if not db_user or not self.auth.verify_password(text, db_user.get('master_password_hash', '')):
                 await update.message.reply_text("❌ Incorrect password. Please try again:")
                 return True
                 
@@ -340,7 +339,7 @@ class SettingsHandler:
             )
             
         elif current_step == 'confirm_password':
-            new_password = scene.get_data().get('new_password')
+            new_password = scene.get_data('new_password')
             if text != new_password:
                 await update.message.reply_text("❌ Passwords do not match. Please try again:")
                 return True
@@ -349,14 +348,15 @@ class SettingsHandler:
             is_auth, user_id = self._check_auth(user.id)
             new_hash = self.auth.hash_password(new_password)
             
-            if self.db.update_user_password(user_id, new_hash):
+            if self.db.update_master_password_by_user_id(user_id, new_hash):
                 self.scene_manager.complete_scene(user.id)
                 await update.message.reply_text(
                     "✅ **Success!**\n\n"
                     "Your master password has been changed.",
                     parse_mode='Markdown'
                 )
-                await self.show_security_menu(update)
+                if update.callback_query:
+                    await self.show_security_menu(update)
             else:
                 await update.message.reply_text("❌ Failed to update password. Please try again later.")
                 self.scene_manager.cancel_scene(user.id)
@@ -370,3 +370,10 @@ class SettingsHandler:
             await update.callback_query.edit_message_text(msg)
         else:
             await update.message.reply_text(msg)
+
+    async def _send_error(self, update: Update, text: str):
+        """Send generic error message."""
+        if update.callback_query:
+            await update.callback_query.answer(text, show_alert=True)
+        else:
+            await update.message.reply_text(f"❌ {text}")

@@ -1,5 +1,5 @@
 """AI module for QuikSafe Bot."""
 
-from .gemini_client import GeminiClient
+from .huggingface_client import HuggingFaceClient
 
-__all__ = ['GeminiClient']
+__all__ = ['HuggingFaceClient']

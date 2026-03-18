@@ -8,8 +8,8 @@ Before you begin, make sure you have:
 
 1. **Python 3.9+** installed
 2. **Telegram Bot Token** from [@BotFather](https://t.me/botfather)
-3. **Supabase Account** (free tier available at [supabase.com](https://supabase.com))
-4. **Google Gemini API Key** (free tier available at [ai.google.dev](https://ai.google.dev))
+3. **PostgreSQL Database** (recommended: managed by Coolify)
+4. **Hugging Face API Key** (available at [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens))
 
 ## Step 1: Get Your API Keys
 
@@ -19,24 +19,22 @@ Before you begin, make sure you have:
 3. Follow the prompts to create your bot
 4. Copy the bot token (looks like: `123456789:ABCdefGHIjklMNOpqrsTUVwxyz`)
 
-### Supabase Setup
-1. Go to [supabase.com](https://supabase.com) and create a free account
-2. Create a new project
-3. Go to Project Settings → API
-4. Copy your **Project URL** and **anon/public key**
-5. Go to SQL Editor and run the schema from `src/database/schema.sql`
+### PostgreSQL Setup
+1. Provision a PostgreSQL instance (Coolify service recommended)
+2. Copy the internal connection string
+3. Set it as `DATABASE_URL` in your environment
 
-### Gemini API Key
-1. Go to [ai.google.dev](https://ai.google.dev)
-2. Click "Get API Key"
-3. Create a new API key (free tier available)
+### Hugging Face API Key
+1. Go to [huggingface.co](https://huggingface.co) and create an account
+2. Open [Settings > Access Tokens](https://huggingface.co/settings/tokens)
+3. Create a token with inference permissions
 4. Copy the API key
 
 ## Step 2: Install Dependencies
 
 ```bash
 # Navigate to project directory
-cd telegram-bot
+cd QuikSafe
 
 # Create virtual environment
 python -m venv venv
@@ -66,18 +64,19 @@ pip install -r requirements.txt
 3. Edit `.env` file and fill in your credentials:
    ```env
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-   SUPABASE_URL=your_supabase_project_url
-   SUPABASE_KEY=your_supabase_anon_key
-   GEMINI_API_KEY=your_gemini_api_key_here
+   DATABASE_URL=postgresql://postgres:password@postgres:5432/quiksafe
+   DB_POOL_MIN_SIZE=1
+   DB_POOL_MAX_SIZE=10
+   DB_CONNECT_TIMEOUT=10
+   DB_RUN_MIGRATIONS_ON_STARTUP=true
+   HUGGINGFACE_API_KEY=your_huggingface_api_key_here
    ENCRYPTION_KEY=your_generated_encryption_key
    ```
 
 ## Step 4: Set Up Database
 
-1. Open your Supabase project dashboard
-2. Go to SQL Editor
-3. Copy the contents of `src/database/schema.sql`
-4. Paste and run the SQL to create tables
+Schema and migrations are applied automatically when the bot starts if:
+- `DB_RUN_MIGRATIONS_ON_STARTUP=true`
 
 ## Step 5: Run the Bot
 
@@ -110,8 +109,8 @@ INFO - Bot is starting... Press Ctrl+C to stop
 - Make sure your `.env` file exists and has the correct token
 
 ### "Failed to connect to database"
-- Check your Supabase URL and key
-- Make sure your Supabase project is active
+- Check your `DATABASE_URL`
+- Ensure the PostgreSQL service is reachable from the app container/host
 
 ### "Invalid encryption key"
 - The encryption key must be exactly 44 characters
@@ -127,7 +126,7 @@ INFO - Bot is starting... Press Ctrl+C to stop
 1. **Never share your `.env` file** - It contains sensitive credentials
 2. **Keep your master password secure** - It cannot be recovered if lost
 3. **Use a strong master password** - Follow the password requirements
-4. **Regularly backup your database** - Use Supabase's backup features
+4. **Regularly backup your database** - Use PostgreSQL backup features (Coolify snapshots/backups)
 5. **Don't run the bot on public computers** - Keep it on your personal server
 
 ## Next Steps
@@ -146,4 +145,4 @@ If you encounter issues:
 
 ---
 
-**Note**: This bot uses free tiers of all services (Telegram, Supabase, Gemini). No costs are incurred for normal usage.
+**Note**: This bot uses Telegram, PostgreSQL, and Hugging Face. Costs depend on your hosting and Hugging Face plan/usage.

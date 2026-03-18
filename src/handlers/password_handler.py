@@ -429,13 +429,22 @@ class PasswordHandler:
         
         # Decrypt
         decrypted_password = self.encryption.decrypt(password_entry['encrypted_password'])
+        escaped_password = self._escape_markdown_v2(decrypted_password)
         
         # Send as copyable text
         await update.callback_query.answer("Password sent below")
         await update.callback_query.message.reply_text(
-            f"`{decrypted_password}`",
+            f"`{escaped_password}`",
             parse_mode='MarkdownV2'
         )
+
+    @staticmethod
+    def _escape_markdown_v2(text: str) -> str:
+        """Escape special characters required by Telegram MarkdownV2."""
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        for char in special_chars:
+            text = text.replace(char, f"\\{char}")
+        return text
 
     async def start_edit_wizard(self, update: Update, password_id: str):
         """Start the edit password wizard."""

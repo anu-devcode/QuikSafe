@@ -260,7 +260,7 @@ class CallbackHandler:
         if self.ai_handler:
             await self.ai_handler.show_menu(update)
         else:
-            await query.edit_message_text("❌ AI handler not initialized.")
+            await update.callback_query.edit_message_text("❌ AI handler not initialized.")
     
     async def _show_settings_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Show settings menu."""
@@ -354,7 +354,9 @@ class CallbackHandler:
             
         elif action == 'task_list':
             page = data.get('page', 0)
-            status_filter = data.get('filter')
+            status_filter = data.get('status')
+            if status_filter == 'all':
+                status_filter = None
             await self.task_handler.show_task_list(update, page, status_filter)
             
         elif action == 'task_view':
@@ -434,6 +436,12 @@ class CallbackHandler:
             
         elif action == 'ai_summarize_tasks':
             await self.ai_handler.handle_summarize_tasks(update)
+
+        elif action == 'ai_prioritize_tasks':
+            await self.ai_handler.handle_prioritize_tasks(update)
+
+        elif action == 'ai_productivity_insights':
+            await self.ai_handler.handle_productivity_insights(update)
             
         elif action == 'ai_apply_tags':
             await self.ai_handler.handle_apply_tags(update)

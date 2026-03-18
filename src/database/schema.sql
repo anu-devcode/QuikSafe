@@ -1,5 +1,7 @@
 -- QuikSafe Bot - Database Schema
--- Run this SQL in your Supabase SQL Editor to set up the database.
+-- This schema is PostgreSQL-native and is safe to execute repeatedly.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
@@ -82,24 +84,26 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Add triggers to update updated_at automatically
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Add triggers to update updated_at automatically (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_updated_at') THEN
+        CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
 
-CREATE TRIGGER update_passwords_updated_at BEFORE UPDATE ON passwords
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_passwords_updated_at') THEN
+        CREATE TRIGGER update_passwords_updated_at BEFORE UPDATE ON passwords
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
 
-CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_tasks_updated_at') THEN
+        CREATE TRIGGER update_tasks_updated_at BEFORE UPDATE ON tasks
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
 
-CREATE TRIGGER update_files_updated_at BEFORE UPDATE ON files
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
-
--- Enable Row Level Security (RLS) for additional security
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE passwords ENABLE ROW LEVEL SECURITY;
-ALTER TABLE tasks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE files ENABLE ROW LEVEL SECURITY;
-
--- Note: You'll need to set up RLS policies based on your authentication method
--- For now, we'll use the service role key which bypasses RLS
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_files_updated_at') THEN
+        CREATE TRIGGER update_files_updated_at BEFORE UPDATE ON files
+            FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
