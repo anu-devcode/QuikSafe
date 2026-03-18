@@ -43,6 +43,9 @@ class ResetHandler:
         telegram_id = user.id
 
         self._clear_reset_flow_context(context)
+        # Stop any pending onboarding/login input capture from interfering with reset flow.
+        context.user_data.pop("awaiting_master_password", None)
+        context.user_data.pop("auth_flow_mode", None)
 
         if self.session.is_authenticated(telegram_id):
             await update.message.reply_text(
@@ -64,6 +67,17 @@ class ResetHandler:
         settings = self._get_settings(db_user)
         reset_state = self._get_reset_state(settings)
         now = self._utcnow()
+
+        # If user already verified recently, continue directly to password step.
+        verified_until = self._parse_datetime(reset_state.get("verified_until"))
+        if reset_state.get("status") == "verified" and verified_until and verified_until > now:
+            context.user_data["reset_user_id"] = db_user["id"]
+            context.user_data["in_reset_flow"] = True
+            await update.message.reply_text(
+                "✅ Recovery code already verified.\n\n"
+                "Step 2/3: Enter your new master password."
+            )
+            return AWAITING_NEW_MASTER_PASSWORD
 
         locked_until = self._parse_datetime(reset_state.get("locked_until"))
         if locked_until and locked_until > now:
@@ -217,9 +231,8 @@ class ResetHandler:
             "• At least 8 characters\n"
             "• Uppercase and lowercase letters\n"
             "• At least one number\n"
-            "• At least one special character (e.g. !@#$%^&*)\n\n"
+            "• At least one special character (for example: ! @ # $ % ^ & *)\n\n"
             "Enter your new password now:",
-            parse_mode="Markdown",
         )
         return AWAITING_NEW_MASTER_PASSWORD
 

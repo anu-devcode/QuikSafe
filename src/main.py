@@ -24,6 +24,7 @@ from src.handlers.callback_handler import CallbackHandler
 from src.analytics import AnalyticsTracker
 from src.notifications import ReminderService
 from src.utils.scene_manager import SceneManager
+from src.utils.keyboard_builder import KeyboardBuilder
 import logging
 from time import monotonic
 
@@ -239,7 +240,57 @@ def main():
         if scene_manager.has_active_scene(user.id):
             return
 
-        text = message.text.strip().lower()
+        text_raw = message.text.strip()
+        text = text_raw.lower()
+
+        # Built-in reply-keyboard dock routes.
+        session_data = session.get_session(user.id) or {}
+        session_user_id = session_data.get('user_id')
+        if text in ('🏠 dashboard', 'dashboard') and session_user_id:
+            await start_handler._show_main_menu(message, user.first_name, session_user_id)
+            raise ApplicationHandlerStop
+
+        if text in ('🔐 vault', 'vault'):
+            await password_handler.show_password_list(update)
+            raise ApplicationHandlerStop
+
+        if text in ('✅ planner', 'planner'):
+            await task_handler.show_task_list(update)
+            raise ApplicationHandlerStop
+
+        if text in ('📁 library', 'library'):
+            await file_handler.show_file_list(update)
+            raise ApplicationHandlerStop
+
+        if text in ('🤖 ai studio', 'ai studio'):
+            await ai_handler.show_menu(update)
+            raise ApplicationHandlerStop
+
+        if text in ('⚙️ control', 'control', 'settings'):
+            await settings_handler.show_menu(update)
+            raise ApplicationHandlerStop
+
+        if text in ('➕ quick capture', 'quick capture'):
+            await password_handler.start_save_wizard(update)
+            raise ApplicationHandlerStop
+
+        if text in ('📝 quick plan', 'quick plan'):
+            await task_handler.start_add_wizard(update)
+            raise ApplicationHandlerStop
+
+        if text in ('📎 drop file', 'drop file'):
+            await message.reply_text(
+                "Send any file, photo, video, audio, or voice clip now and I will store it securely."
+            )
+            raise ApplicationHandlerStop
+
+        if text in ('🔎 instant find', 'instant find'):
+            await message.reply_text(
+                "Use `/search <query>` for global search.\n"
+                "Example: `/search invoices march`",
+                parse_mode='Markdown'
+            )
+            raise ApplicationHandlerStop
 
         if any(word in text for word in ['add task', 'new task', 'task']) and len(text) <= 32:
             analytics.track('intent_routed_task_create', telegram_id=user.id)
@@ -407,10 +458,12 @@ def main():
             )
             return
 
+        kb = KeyboardBuilder()
         await message.reply_text(
             "This bot now uses button-based flows.\n"
             "Use the main menu buttons (Password Vault, Task Planner, File Hub, AI, Settings).\n"
-            "Use /search only when you need global search."
+            "Use /search only when you need global search.",
+            reply_markup=kb.main_reply_dock()
         )
 
     # Catch unsupported slash commands and nudge users to button sequences.

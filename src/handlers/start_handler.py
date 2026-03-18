@@ -131,6 +131,10 @@ class StartHandler:
         Returns:
             Next conversation state or end
         """
+        if context.user_data.get('in_reset_flow'):
+            # Recovery flow is active; ignore onboarding password capture.
+            return ConversationHandler.END
+
         user = update.effective_user
         telegram_id = user.id
         master_password = update.message.text
@@ -309,6 +313,12 @@ class StartHandler:
             welcome_text,
             reply_markup=kb.main_menu(),
             parse_mode='Markdown'
+        )
+
+        # Persistent bottom dock for commandless navigation.
+        await message.reply_text(
+            "Navigation dock is ready below. You can use buttons instead of slash commands.",
+            reply_markup=kb.main_reply_dock()
         )
     
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

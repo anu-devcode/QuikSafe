@@ -3,7 +3,7 @@ QuikSafe Bot - Inline Keyboard Builder
 Utility for creating consistent, beautiful inline keyboards.
 """
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from typing import List, Dict, Any, Optional, Tuple
 import json
 
@@ -237,6 +237,37 @@ class KeyboardBuilder:
             ],
         ]
         return InlineKeyboardMarkup(keyboard)
+
+    @classmethod
+    def main_reply_dock(cls) -> ReplyKeyboardMarkup:
+        """Create persistent Telegram built-in keyboard for commandless navigation."""
+        keyboard = [
+            [
+                KeyboardButton("🏠 Dashboard"),
+                KeyboardButton("🔐 Vault"),
+                KeyboardButton("✅ Planner"),
+            ],
+            [
+                KeyboardButton("📁 Library"),
+                KeyboardButton("🤖 AI Studio"),
+                KeyboardButton("⚙️ Control"),
+            ],
+            [
+                KeyboardButton("➕ Quick Capture"),
+                KeyboardButton("📝 Quick Plan"),
+                KeyboardButton("📎 Drop File"),
+            ],
+            [
+                KeyboardButton("🔎 Instant Find"),
+            ],
+        ]
+        return ReplyKeyboardMarkup(
+            keyboard=keyboard,
+            resize_keyboard=True,
+            one_time_keyboard=False,
+            is_persistent=True,
+            input_field_placeholder="Use the dock buttons to navigate",
+        )
     
     @classmethod
     def quick_actions(cls) -> InlineKeyboardMarkup:

@@ -3,7 +3,7 @@ QuikSafe Bot - Settings Handler
 Handles user preferences and settings.
 """
 
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ContextTypes
 from src.database.db_manager import DatabaseManager
 from src.security.auth import SessionManager
@@ -167,6 +167,10 @@ class SettingsHandler:
             "👋 **Logged Out**\n\n"
             "Your secure session has been cleared.\n"
             "Use /start to log in again."
+        )
+        await update.callback_query.message.reply_text(
+            "Dock hidden until you sign in again.",
+            reply_markup=ReplyKeyboardRemove()
         )
 
     async def show_security_menu(self, update: Update):
