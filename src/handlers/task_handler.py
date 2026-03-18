@@ -81,9 +81,18 @@ class TaskHandler:
         # Build message
         filter_text = f" ({status_filter})" if status_filter else ""
         if not tasks:
-            message = f"✅ **No tasks found{filter_text}.**\n\nUse 'Add New Task' to create one!"
+            message = (
+                "✅ **Planner Is Clear**\n"
+                "━━━━━━━━━━━━\n\n"
+                f"No tasks found{filter_text}.\n"
+                "Create a new item to keep momentum moving."
+            )
         else:
-            message = f"✅ **Your Tasks**{filter_text} ({len(tasks)} total)\n\n"
+            message = (
+                "✅ **Planner Board**\n"
+                "━━━━━━━━━━━━\n"
+                f"{len(tasks)} active item(s){filter_text}\n\n"
+            )
             for i, task in enumerate(current_page_items, 1):
                 status_icon = "✅" if task['status'] == 'completed' else "⬜"
                 priority_icon = "🔴" if task['priority'] == 'high' else "🟡" if task['priority'] == 'medium' else "🟢"
@@ -108,15 +117,15 @@ class TaskHandler:
         
         # Filter buttons
         keyboard.append([
-            InlineKeyboardButton("All", callback_data=self.kb.encode_callback('task_list', p=0)),
-            InlineKeyboardButton("Pending", callback_data=self.kb.encode_callback('task_list', p=0, f='pending')),
-            InlineKeyboardButton("Completed", callback_data=self.kb.encode_callback('task_list', p=0, f='completed'))
+            InlineKeyboardButton("All", callback_data=self.kb.encode_callback('task_list', p=0, s='all')),
+            InlineKeyboardButton("Queue", callback_data=self.kb.encode_callback('task_list', p=0, s='pending')),
+            InlineKeyboardButton("Finished", callback_data=self.kb.encode_callback('task_list', p=0, s='completed'))
         ])
         
         # Action buttons
         keyboard.append([
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['add']} Add New",
+                    f"{self.kb.EMOJI['add']} Create Task",
                 callback_data=self.kb.encode_callback('task_add_start')
             )
         ])
@@ -419,15 +428,17 @@ class TaskHandler:
         )
         
         msg = (
-            f"✅ **Task Created!**\n\n"
+            "✅ **Task Captured**\n"
+            "━━━━━━━━━━━━\n\n"
             f"**{content}**\n"
             f"Priority: {priority.capitalize()}\n"
-            f"Tags: {', '.join(tags) if tags else 'None'}"
+            f"Tags: {', '.join(tags) if tags else 'None'}\n\n"
+            "Added to your planner board."
         )
         
         keyboard = [[
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['view']} View List",
+                    f"{self.kb.EMOJI['view']} Open Planner",
                 callback_data=self.kb.encode_callback('task_list', p=0)
             ),
             InlineKeyboardButton(

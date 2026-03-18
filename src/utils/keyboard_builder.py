@@ -187,51 +187,51 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['add']} Quick Save",
+                    f"{cls.EMOJI['add']} Quick Capture",
                     callback_data=cls.encode_callback('quick_save_password')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['task']} Quick Task",
+                    f"{cls.EMOJI['task']} Quick Plan",
                     callback_data=cls.encode_callback('quick_add_task')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['upload']} Quick Upload",
+                    f"{cls.EMOJI['upload']} Drop File",
                     callback_data=cls.encode_callback('quick_upload_file')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['search']} Quick Search",
+                    f"{cls.EMOJI['search']} Instant Find",
                     callback_data=cls.encode_callback('quick_search')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['password']} Password Vault",
+                    f"{cls.EMOJI['password']} Vault",
                     callback_data=cls.encode_callback('menu_passwords')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['task']} Task Planner",
+                    f"{cls.EMOJI['task']} Planner",
                     callback_data=cls.encode_callback('menu_tasks')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['file']} File Hub",
+                    f"{cls.EMOJI['file']} Library",
                     callback_data=cls.encode_callback('menu_files')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['ai']} AI Assistant",
+                    f"{cls.EMOJI['ai']} AI Studio",
                     callback_data=cls.encode_callback('menu_ai')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['search']} Smart Search",
+                    f"{cls.EMOJI['search']} Search",
                     callback_data=cls.encode_callback('menu_search')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['settings']} Settings",
+                    f"{cls.EMOJI['settings']} Control",
                     callback_data=cls.encode_callback('menu_settings')
                 ),
             ],
@@ -244,25 +244,25 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['add']} Save Password",
+                    f"{cls.EMOJI['add']} Capture Password",
                     callback_data=cls.encode_callback('quick_save_password')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['add']} Add Task",
+                    f"{cls.EMOJI['add']} Add Priority Task",
                     callback_data=cls.encode_callback('quick_add_task')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['upload']} Upload File",
+                    f"{cls.EMOJI['upload']} Drop New File",
                     callback_data=cls.encode_callback('quick_upload_file')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['search']} Smart Search",
+                    f"{cls.EMOJI['search']} Instant Search",
                     callback_data=cls.encode_callback('quick_search')
                 ),
             ],
@@ -281,19 +281,19 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['add']} Save New Password",
+                    f"{cls.EMOJI['add']} Add New Credential",
                     callback_data=cls.encode_callback('password_save_start')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['view']} Browse Passwords",
+                    f"{cls.EMOJI['view']} Browse Vault",
                     callback_data=cls.encode_callback('password_list', p=0)
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['search']} Search Passwords",
+                    f"{cls.EMOJI['search']} Find Credential",
                     callback_data=cls.encode_callback('password_search')
                 ),
                 InlineKeyboardButton(
@@ -316,27 +316,27 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['add']} Add New Task",
+                    f"{cls.EMOJI['add']} Create Task",
                     callback_data=cls.encode_callback('task_add_start')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['pending']} Pending",
+                    f"{cls.EMOJI['pending']} Queue",
                     callback_data=cls.encode_callback('task_list', s='pending')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['in_progress']} In Progress",
+                    f"{cls.EMOJI['in_progress']} Active",
                     callback_data=cls.encode_callback('task_list', s='in_progress')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['completed']} Completed",
+                    f"{cls.EMOJI['completed']} Finished",
                     callback_data=cls.encode_callback('task_list', s='completed')
                 ),
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['view']} All Tasks",
+                    f"{cls.EMOJI['view']} Full Board",
                     callback_data=cls.encode_callback('task_list', s='all')
                 ),
             ],
@@ -361,13 +361,13 @@ class KeyboardBuilder:
         keyboard = [
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['upload']} Upload File",
+                    f"{cls.EMOJI['upload']} Add New File",
                     callback_data=cls.encode_callback('file_upload_start')
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    f"{cls.EMOJI['view']} Browse All Files",
+                    f"{cls.EMOJI['view']} Browse Library",
                     callback_data=cls.encode_callback('file_list', p=0)
                 ),
             ],

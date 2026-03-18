@@ -125,6 +125,7 @@ def main():
             return
 
         if session.is_authenticated(user.id):
+            _touch_activity_if_authenticated(user.id, context)
             return
 
         await message.reply_text(
@@ -157,9 +158,50 @@ def main():
                 return
 
             settings = db.get_user_settings(user_id)
-            reminder_service.mark_seen(user_id, settings)
+            reminder_service.mark_seen(user_id, telegram_id, settings)
         except Exception as exc:
             logger.debug("Skipping activity touch for %s: %s", telegram_id, exc)
+
+    async def admin_stats_command(update: Update, context):
+        """Show retention/notification analytics snapshot for support admins."""
+        user = update.effective_user
+        message = update.effective_message
+        if not user or not message:
+            return
+
+        if user.id not in Config.SUPPORT_ADMIN_TELEGRAM_IDS:
+            await message.reply_text("❌ You are not authorized to use this command.")
+            analytics.track('security_blocked_command', telegram_id=user.id, metadata={'command': 'adminstats'})
+            return
+
+        days = 7
+        if context.args:
+            try:
+                days = int(context.args[0])
+            except ValueError:
+                pass
+
+        stats = db.get_notification_analytics_snapshot(days)
+        conversion_pct = stats['conversion_rate'] * 100
+        task_pct = stats['task_conversion_rate'] * 100
+        weekly_pct = stats['weekly_conversion_rate'] * 100
+        inactivity_pct = stats['inactivity_conversion_rate'] * 100
+        await message.reply_text(
+            (
+                f"📊 **Retention Snapshot ({stats['days']}d)**\n\n"
+                f"• Task reminders sent: {stats['task_sent']}\n"
+            f"• Task re-engaged: {stats['task_reengaged']} ({task_pct:.1f}%)\n"
+                f"• Weekly summaries sent: {stats['weekly_sent']}\n"
+            f"• Weekly re-engaged: {stats['weekly_reengaged']} ({weekly_pct:.1f}%)\n"
+                f"• Inactivity nudges sent: {stats['inactivity_sent']}\n"
+            f"• Inactivity re-engaged: {stats['inactivity_reengaged']} ({inactivity_pct:.1f}%)\n"
+                f"• Total notifications: {stats['total_sent']}\n"
+                f"• Re-engagement events: {stats['reengaged']}\n"
+                f"• Re-engaged users: {stats['reengaged_users']}\n"
+                f"• Re-engagement rate: {conversion_pct:.1f}%"
+            ),
+            parse_mode='Markdown',
+        )
 
     async def unauth_input_guard(update: Update, context):
         """Block unauthenticated text/uploads outside login and reset recovery flows."""
@@ -275,7 +317,7 @@ def main():
                 if await task_handler.handle_wizard_input(update):
                     return
 
-            elif scene.scene_id == 'change_password':
+            elif scene.scene_id in ['change_password', 'set_timezone']:
                 if await settings_handler.handle_wizard_input(update):
                     return
 
@@ -331,28 +373,48 @@ def main():
     
     # Register command handlers
     application.add_handler(CommandHandler('help', help_command))
-    
-    # Password commands
-    application.add_handler(CommandHandler('savepassword', password_handler.save_password_start))
-    application.add_handler(CommandHandler('getpassword', password_handler.get_password))
-    application.add_handler(CommandHandler('listpasswords', password_handler.list_passwords))
-    application.add_handler(CommandHandler('deletepassword', password_handler.delete_password_command))
-    
-    # Task commands
-    application.add_handler(CommandHandler('listtasks', task_handler.list_tasks))
-    application.add_handler(CommandHandler('addtask', task_handler.add_task_start))
-    application.add_handler(CommandHandler('completetask', task_handler.complete_task_command))
-    application.add_handler(CommandHandler('deletetask', task_handler.delete_task_command))
-    
-    # File commands
-    application.add_handler(CommandHandler('listfiles', file_handler.list_files))
-    application.add_handler(CommandHandler('getfile', file_handler.get_file))
-    application.add_handler(CommandHandler('deletefile', file_handler.delete_file_command))
+    application.add_handler(CommandHandler('adminstats', admin_stats_command))
 
     # Search and AI commands
     application.add_handler(CommandHandler('search', search_handler.search))
-    application.add_handler(CommandHandler('ai', ai_handler.show_menu))
-    application.add_handler(CommandHandler('summarize', search_handler.summarize))
+
+    supported_commands = {
+        'start',
+        'help',
+        'search',
+        'resetmaster',
+        'adminreset',
+        'adminstats',
+        'cancel',
+    }
+
+    async def commandless_hint(update: Update, context):
+        """Guide users to button-first navigation for unsupported commands."""
+        message = update.effective_message
+        user = update.effective_user
+        if not message or not user or not message.text:
+            return
+
+        token = message.text.strip().split()[0]
+        command = token[1:].split('@', 1)[0].lower()
+        if command in supported_commands:
+            return
+
+        if not session.is_authenticated(user.id):
+            await message.reply_text(
+                "Use /start to authenticate first.\n"
+                "After login, use the on-screen buttons to navigate."
+            )
+            return
+
+        await message.reply_text(
+            "This bot now uses button-based flows.\n"
+            "Use the main menu buttons (Password Vault, Task Planner, File Hub, AI, Settings).\n"
+            "Use /search only when you need global search."
+        )
+
+    # Catch unsupported slash commands and nudge users to button sequences.
+    application.add_handler(MessageHandler(filters.COMMAND, commandless_hint), group=5)
 
     async def run_task_reminders(context):
         await reminder_service.run_task_reminders(context)

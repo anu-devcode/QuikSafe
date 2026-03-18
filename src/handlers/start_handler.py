@@ -290,19 +290,19 @@ class StartHandler:
 
             welcome_text = (
                 f"👋 **Welcome, {user_name}!**\n\n"
-                "Your secure workspace is ready.\n\n"
+                "Your private command center is live.\n\n"
                 f"⚡ **Today**: {focus_line}\n\n"
-                "**Fast lane**\n"
-                "• Quick Save for passwords\n"
-                "• Quick Task for instant planning\n"
-                "• Quick Upload for files\n"
-                "• Quick Search across everything\n\n"
-                "**Workspace modules**\n"
-                "• Password Vault\n"
-                "• Task Planner\n"
-                "• File Hub\n"
-                "• AI Assistant\n\n"
-                "Choose an option below:"
+                "**Express lane**\n"
+                "• Capture credentials in seconds\n"
+                "• Plan and prioritize fast\n"
+                "• Drop files and keep them searchable\n"
+                "• Search everything instantly\n\n"
+                "**Your suites**\n"
+                "• Vault\n"
+                "• Planner\n"
+                "• Library\n"
+                "• AI Studio\n\n"
+                "Pick your next move below:"
             )
         
         await message.reply_text(

@@ -134,6 +134,11 @@ class SceneManager:
                 'confirm_password'
             ],
 
+            # Timezone wizard
+            'set_timezone': [
+                'timezone_offset'
+            ],
+
             
             # Edit password wizard
             'edit_password': [

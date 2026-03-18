@@ -53,18 +53,18 @@ class AIHandler:
             
         message = (
             "🤖 **AI Assistant**\n\n"
-            "Get smart help to organize, prioritize, and summarize your data.\n\n"
-            "Choose what you want to do:"
+            "Your intelligence layer for clarity, focus, and momentum.\n\n"
+            "Choose an AI workflow:"
         )
         
         keyboard = [
             [
-                InlineKeyboardButton("🏷️ Auto-Tag Items", callback_data=self.kb.encode_callback('ai_tag')),
-                InlineKeyboardButton("📝 Summarize Tasks", callback_data=self.kb.encode_callback('ai_summarize_tasks'))
+                InlineKeyboardButton("🏷️ Smart Tag", callback_data=self.kb.encode_callback('ai_tag')),
+                InlineKeyboardButton("📝 Task Brief", callback_data=self.kb.encode_callback('ai_summarize_tasks'))
             ],
             [
-                InlineKeyboardButton("📌 Prioritize Tasks", callback_data=self.kb.encode_callback('ai_prioritize_tasks')),
-                InlineKeyboardButton("📊 Productivity Insights", callback_data=self.kb.encode_callback('ai_productivity_insights'))
+                InlineKeyboardButton("📌 Priority Queue", callback_data=self.kb.encode_callback('ai_prioritize_tasks')),
+                InlineKeyboardButton("📊 Performance Insights", callback_data=self.kb.encode_callback('ai_productivity_insights'))
             ],
             [
                 InlineKeyboardButton("🔍 Smart Search", callback_data=self.kb.encode_callback('quick_search'))
@@ -96,7 +96,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Analyzing your data for better tags. This may take a moment...")
+        await update.callback_query.edit_message_text("🤖 AI Studio is analyzing your data for stronger tags...")
         
         # Get untagged items across all categories
         passwords = self.db.get_passwords(user_id)
@@ -118,7 +118,7 @@ class AIHandler:
         
         if not untagged_passwords and not untagged_tasks and not untagged_files:
             await update.callback_query.edit_message_text(
-                "✅ All your items are already tagged!",
+                "✅ Your workspace is already fully tagged.",
                 reply_markup=self.kb.back_to_menu('menu_ai')
             )
             return
@@ -143,9 +143,9 @@ class AIHandler:
             
         msg = (
             "🏷️ **Tag Suggestions**\n\n"
-            "Here are smart suggestions for untagged items:\n\n" +
+            "Recommended tags for your unclassified items:\n\n" +
             "\n".join(suggestions) +
-            "\n\nTap **Apply All** to save them automatically."
+            "\n\nTap **Apply All** to apply instantly."
         )
         
         keyboard = [
@@ -168,7 +168,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Applying tags now... Please wait a moment.")
+        await update.callback_query.edit_message_text("🤖 Applying smart tags across your workspace...")
         
         # Get untagged items
         passwords = self.db.get_passwords(user_id)
@@ -190,7 +190,7 @@ class AIHandler:
         
         if not untagged_passwords and not untagged_tasks and not untagged_files:
             await update.callback_query.edit_message_text(
-                "✅ No untagged items found!",
+                "✅ No untagged items found.",
                 reply_markup=self.kb.back_to_menu('menu_ai')
             )
             return
@@ -222,11 +222,11 @@ class AIHandler:
         total = count_passwords + count_tasks + count_files
         
         await update.callback_query.edit_message_text(
-            f"✅ Auto-tagging complete: {total} item(s) updated.\n"
+            f"✅ Smart tagging complete: {total} item(s) updated.\n"
             f"• Passwords: {count_passwords}\n"
             f"• Tasks: {count_tasks}\n"
             f"• Files: {count_files}\n\n"
-            "Your data is now easier to search and filter.",
+            "Your workspace is now cleaner and faster to search.",
             reply_markup=self.kb.back_to_menu('menu_ai')
         )
 
@@ -239,7 +239,7 @@ class AIHandler:
             await self._send_auth_error(update)
             return
             
-        await update.callback_query.edit_message_text("🤖 Generating your task summary...")
+        await update.callback_query.edit_message_text("🤖 Preparing your task brief...")
         
         tasks = self.db.get_tasks(user_id)
         
@@ -274,7 +274,7 @@ class AIHandler:
 
         if not prioritized:
             await update.callback_query.edit_message_text(
-                "✅ No tasks to prioritize.",
+                "✅ No tasks available for prioritization.",
                 reply_markup=self.kb.back_to_menu('menu_ai')
             )
             return

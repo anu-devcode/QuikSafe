@@ -11,6 +11,8 @@ from src.utils.keyboard_builder import KeyboardBuilder
 from src.utils.scene_manager import SceneManager
 from src.security.auth import AuthManager
 import logging
+import re
+from typing import Optional
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,60 @@ class SettingsHandler:
         self.scene_manager = scene_manager
         self.auth = auth
         self.kb = KeyboardBuilder()
+
+    @staticmethod
+    def _get_notification_defaults() -> dict:
+        return {
+            'tasks': True,
+            'summary': False,
+            'reminder_window_hours': 24,
+            'inactivity_nudge_hours': 72,
+            'quiet_hours_enabled': False,
+            'quiet_hours_start': 22,
+            'quiet_hours_end': 8,
+            'timezone_offset_minutes': 0,
+        }
+
+    def _get_notification_settings(self, settings: dict) -> dict:
+        notifications = settings.get('notifications', {}) if isinstance(settings, dict) else {}
+        defaults = self._get_notification_defaults()
+        merged = defaults.copy()
+        if isinstance(notifications, dict):
+            merged.update(notifications)
+        return merged
+
+    @staticmethod
+    def _format_utc_offset(offset_minutes: int) -> str:
+        sign = '+' if offset_minutes >= 0 else '-'
+        total = abs(int(offset_minutes))
+        hours = total // 60
+        minutes = total % 60
+        return f"UTC{sign}{hours:02d}:{minutes:02d}"
+
+    @staticmethod
+    def _parse_utc_offset(text: str) -> Optional[int]:
+        """Parse UTC offset formats like UTC+05:30, +2, -04:00, or Z."""
+        raw = (text or '').strip().upper().replace('UTC', '').replace(' ', '')
+        if raw in ('Z', '+0', '-0', '+00', '-00', '+00:00', '-00:00', '0'):
+            return 0
+
+        match = re.fullmatch(r'([+-])(\d{1,2})(?::?(\d{2}))?', raw)
+        if not match:
+            return None
+
+        sign, hh, mm = match.groups()
+        hours = int(hh)
+        minutes = int(mm or '0')
+        if hours > 14 or minutes not in (0, 15, 30, 45):
+            return None
+
+        total = hours * 60 + minutes
+        if sign == '-':
+            total = -total
+
+        if total < -12 * 60 or total > 14 * 60:
+            return None
+        return total
     
     def _check_auth(self, telegram_id: int) -> tuple[bool, str]:
         """Check if user is authenticated."""
@@ -56,7 +112,7 @@ class SettingsHandler:
         
         # Defaults
         security = settings.get('security', {})
-        notifications = settings.get('notifications', {})
+        notifications = self._get_notification_settings(settings)
         
         auto_lock = security.get('auto_lock_minutes', 60)
         task_reminders = "On" if notifications.get('tasks', True) else "Off"
@@ -64,7 +120,7 @@ class SettingsHandler:
             
         message = (
             "⚙️ **Settings**\n\n"
-            "Customize security and notifications in one place.\n\n"
+            "Tune security, alerts, and experience controls.\n\n"
             "**Security**\n"
             f"• Auto-lock: {auto_lock} minutes\n"
             "• Data Encryption: AES-256 (Active)\n\n"
@@ -127,7 +183,7 @@ class SettingsHandler:
             
         message = (
             "🔒 **Security Settings**\n\n"
-            "Manage access and protection controls.\n\n"
+            "Manage access posture and protection controls.\n\n"
             "• **Encryption**: AES-256 (Always On)\n"
             f"• **Auto-Lock**: {auto_lock} Minutes\n"
             "• **Biometric**: Disabled (Coming Soon)"
@@ -143,11 +199,18 @@ class SettingsHandler:
             ]
         ]
         
-        await update.callback_query.edit_message_text(
-            message,
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            parse_mode='Markdown'
-        )
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        else:
+            await update.message.reply_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
 
     async def change_auto_lock(self, update: Update):
         """Cycle through auto-lock durations."""
@@ -189,19 +252,32 @@ class SettingsHandler:
             return
             
         settings = self.db.get_user_settings(user_id)
-        notifications = settings.get('notifications', {})
+        notifications = self._get_notification_settings(settings)
         
         tasks_on = notifications.get('tasks', True)
         summary_on = notifications.get('summary', False)
+        reminder_window = int(notifications.get('reminder_window_hours', 24) or 24)
+        inactivity_window = int(notifications.get('inactivity_nudge_hours', 72) or 72)
+        quiet_enabled = bool(notifications.get('quiet_hours_enabled', False))
+        quiet_start = int(notifications.get('quiet_hours_start', 22) or 22)
+        quiet_end = int(notifications.get('quiet_hours_end', 8) or 8)
+        tz_offset = int(notifications.get('timezone_offset_minutes', 0) or 0)
         
         tasks_icon = "✅" if tasks_on else "❌"
         summary_icon = "✅" if summary_on else "❌"
+        quiet_icon = "✅" if quiet_enabled else "❌"
+        quiet_text = f"{quiet_start:02d}:00-{quiet_end:02d}:00" if quiet_enabled else "Off"
+        tz_label = self._format_utc_offset(tz_offset)
             
         message = (
             "🔔 **Notification Settings**\n\n"
-            "Choose which reminders you want to receive.\n\n"
+            "Control cadence, quiet hours, and delivery style.\n\n"
             f"• **Task Reminders**: {tasks_icon} {'On' if tasks_on else 'Off'}\n"
             f"• **Weekly Summary**: {summary_icon} {'On' if summary_on else 'Off'}\n"
+            f"• **Task Window**: Next {reminder_window}h\n"
+            f"• **Inactivity Nudge**: {inactivity_window}h\n"
+            f"• **Quiet Hours**: {quiet_icon} {quiet_text}\n"
+            f"• **Timezone**: {tz_label}\n"
             "• **Security Alerts**: ✅ On"
         )
         
@@ -209,6 +285,18 @@ class SettingsHandler:
             [
                 InlineKeyboardButton(f"{tasks_icon} Toggle Reminders", callback_data=self.kb.encode_callback('settings_toggle_reminders')),
                 InlineKeyboardButton(f"{summary_icon} Toggle Weekly", callback_data=self.kb.encode_callback('settings_toggle_summary'))
+            ],
+            [
+                InlineKeyboardButton("⏱️ Cycle Task Window", callback_data=self.kb.encode_callback('settings_cycle_task_window')),
+                InlineKeyboardButton("🕒 Cycle Nudge Gap", callback_data=self.kb.encode_callback('settings_cycle_inactivity'))
+            ],
+            [
+                InlineKeyboardButton(f"{quiet_icon} Toggle Quiet Hours", callback_data=self.kb.encode_callback('settings_toggle_quiet')),
+                InlineKeyboardButton("🌙 Cycle Quiet Window", callback_data=self.kb.encode_callback('settings_cycle_quiet_window'))
+            ],
+            [
+                InlineKeyboardButton("🌍 Cycle Timezone", callback_data=self.kb.encode_callback('settings_cycle_timezone')),
+                InlineKeyboardButton("⌨️ Set Timezone", callback_data=self.kb.encode_callback('settings_set_timezone')),
             ],
             [
                 InlineKeyboardButton(f"{self.kb.EMOJI['back']} Back to Settings", callback_data=self.kb.encode_callback('menu_settings'))
@@ -231,8 +319,7 @@ class SettingsHandler:
             return
             
         settings = self.db.get_user_settings(user_id)
-        if 'notifications' not in settings:
-            settings['notifications'] = {'tasks': True, 'summary': False}
+        settings['notifications'] = self._get_notification_settings(settings)
             
         if setting_type == 'tasks':
             settings['notifications']['tasks'] = not settings['notifications'].get('tasks', True)
@@ -243,6 +330,141 @@ class SettingsHandler:
         
         # Refresh menu
         await self.show_notifications_menu(update)
+
+    async def cycle_task_window(self, update: Update):
+        """Cycle due-soon reminder window in hours."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        options = [6, 12, 24, 48]
+        settings = self.db.get_user_settings(user_id)
+        settings['notifications'] = self._get_notification_settings(settings)
+        current = int(settings['notifications'].get('reminder_window_hours', 24) or 24)
+        next_value = options[(options.index(current) + 1) % len(options)] if current in options else 24
+        settings['notifications']['reminder_window_hours'] = next_value
+        self.db.update_user_settings(user_id, settings)
+        await self.show_notifications_menu(update)
+
+    async def cycle_inactivity_window(self, update: Update):
+        """Cycle inactivity nudge cooldown in hours."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        options = [48, 72, 96, 168]
+        settings = self.db.get_user_settings(user_id)
+        settings['notifications'] = self._get_notification_settings(settings)
+        current = int(settings['notifications'].get('inactivity_nudge_hours', 72) or 72)
+        next_value = options[(options.index(current) + 1) % len(options)] if current in options else 72
+        settings['notifications']['inactivity_nudge_hours'] = next_value
+        self.db.update_user_settings(user_id, settings)
+        await self.show_notifications_menu(update)
+
+    async def toggle_quiet_hours(self, update: Update):
+        """Enable or disable quiet hours for reminders."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        settings = self.db.get_user_settings(user_id)
+        settings['notifications'] = self._get_notification_settings(settings)
+        enabled = bool(settings['notifications'].get('quiet_hours_enabled', False))
+        settings['notifications']['quiet_hours_enabled'] = not enabled
+        self.db.update_user_settings(user_id, settings)
+        await self.show_notifications_menu(update)
+
+    async def cycle_quiet_window(self, update: Update):
+        """Cycle common quiet-hour ranges."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        presets = [(22, 8), (23, 7), (0, 6), (21, 6)]
+        settings = self.db.get_user_settings(user_id)
+        settings['notifications'] = self._get_notification_settings(settings)
+        current = (
+            int(settings['notifications'].get('quiet_hours_start', 22) or 22),
+            int(settings['notifications'].get('quiet_hours_end', 8) or 8),
+        )
+        next_window = presets[(presets.index(current) + 1) % len(presets)] if current in presets else presets[0]
+        settings['notifications']['quiet_hours_enabled'] = True
+        settings['notifications']['quiet_hours_start'] = next_window[0]
+        settings['notifications']['quiet_hours_end'] = next_window[1]
+        self.db.update_user_settings(user_id, settings)
+        await self.show_notifications_menu(update)
+
+    async def cycle_timezone(self, update: Update):
+        """Cycle commonly used UTC offsets for quiet-hour calculations."""
+        user = update.effective_user
+        is_auth, user_id = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        options = [-480, -300, -60, 0, 60, 120, 180, 330, 480]
+        settings = self.db.get_user_settings(user_id)
+        settings['notifications'] = self._get_notification_settings(settings)
+        current = int(settings['notifications'].get('timezone_offset_minutes', 0) or 0)
+        next_value = options[(options.index(current) + 1) % len(options)] if current in options else 0
+        settings['notifications']['timezone_offset_minutes'] = next_value
+        self.db.update_user_settings(user_id, settings)
+        await self.show_notifications_menu(update)
+
+    async def start_set_timezone_wizard(self, update: Update):
+        """Start one-step wizard for exact UTC offset entry."""
+        user = update.effective_user
+        is_auth, _ = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
+        scene = self.scene_manager.start_scene(user.id, 'set_timezone')
+        if scene is None:
+            await self._send_error(update, "Timezone setup is not available right now.")
+            return
+
+        message = (
+            "🌍 **Set Timezone**\n\n"
+            "Enter your UTC offset in one of these formats:\n"
+            "• `UTC+05:30`\n"
+            "• `+2`\n"
+            "• `-04:00`\n"
+            "• `Z` (for UTC)\n\n"
+            "Valid range: UTC-12:00 to UTC+14:00"
+        )
+
+        keyboard = [[
+            InlineKeyboardButton(
+                f"{self.kb.EMOJI['cancel']} Cancel",
+                callback_data=self.kb.encode_callback('cancel')
+            )
+        ]]
+
+        if update.callback_query:
+            wizard_message = await update.callback_query.edit_message_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+        else:
+            wizard_message = await update.message.reply_text(
+                message,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
+            )
+
+        if wizard_message:
+            self.scene_manager.set_scene_data(user.id, 'wizard_chat_id', wizard_message.chat_id)
+            self.scene_manager.set_scene_data(user.id, 'wizard_message_id', wizard_message.message_id)
 
     async def start_change_password_wizard(self, update: Update):
         """Start the change password wizard."""
@@ -296,6 +518,36 @@ class SettingsHandler:
             return False
             
         scene = self.scene_manager.get_scene(user.id)
+        if scene.scene_id == 'set_timezone':
+            offset_minutes = self._parse_utc_offset(update.message.text.strip())
+            if offset_minutes is None:
+                await self._send_wizard_step(
+                    update,
+                    user.id,
+                    "❌ Invalid format. Try examples: `UTC+05:30`, `+2`, `-04:00`, `Z`",
+                    parse_mode='Markdown'
+                )
+                return True
+
+            is_auth, user_id = self._check_auth(user.id)
+            if not is_auth:
+                await self._send_auth_error(update)
+                return True
+
+            settings = self.db.get_user_settings(user_id)
+            settings['notifications'] = self._get_notification_settings(settings)
+            settings['notifications']['timezone_offset_minutes'] = offset_minutes
+            self.db.update_user_settings(user_id, settings)
+            self.scene_manager.complete_scene(user.id)
+
+            await self._send_wizard_step(
+                update,
+                user.id,
+                f"✅ Timezone updated to {self._format_utc_offset(offset_minutes)}"
+            )
+            await self.show_notifications_menu(update)
+            return True
+
         if scene.scene_id != 'change_password':
             return False
             
@@ -385,7 +637,7 @@ class SettingsHandler:
         else:
             await update.message.reply_text(f"❌ {text}")
 
-    async def _send_wizard_step(self, update: Update, telegram_id: int, text: str, reply_markup=None):
+    async def _send_wizard_step(self, update: Update, telegram_id: int, text: str, reply_markup=None, parse_mode='Markdown'):
         """Edit existing wizard prompt when possible to keep chat clean."""
         scene = self.scene_manager.get_scene(telegram_id)
         if scene:
@@ -398,16 +650,16 @@ class SettingsHandler:
                         message_id=message_id,
                         text=text,
                         reply_markup=reply_markup,
-                        parse_mode='Markdown'
+                        parse_mode=parse_mode
                     )
                     return
                 except Exception:
                     pass
 
         if update.message:
-            sent = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+            sent = await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
         else:
-            sent = await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+            sent = await update.callback_query.message.reply_text(text, reply_markup=reply_markup, parse_mode=parse_mode)
 
         if scene and sent:
             self.scene_manager.set_scene_data(telegram_id, 'wizard_chat_id', sent.chat_id)

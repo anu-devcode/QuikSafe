@@ -20,6 +20,7 @@ from src.security.auth import AuthManager, SessionManager
 
 AWAITING_RESET_CODE = 1
 AWAITING_NEW_MASTER_PASSWORD = 2
+AWAITING_NEW_MASTER_PASSWORD_CONFIRM = 3
 
 
 class ResetHandler:
@@ -46,7 +47,7 @@ class ResetHandler:
         if self.session.is_authenticated(telegram_id):
             await update.message.reply_text(
                 "✅ You are already authenticated.\n"
-                "Use Settings > Security > Change Master Pass for normal password updates."
+                "Use Control > Security > Change Master Password for normal updates."
             )
             self._clear_reset_flow_context(context)
             return ConversationHandler.END
@@ -68,7 +69,10 @@ class ResetHandler:
         if locked_until and locked_until > now:
             remaining = int((locked_until - now).total_seconds() // 60) + 1
             await update.message.reply_text(
-                f"⛔ Recovery is temporarily locked due to failed attempts. Try again in about {remaining} minutes."
+                "⛔ **Recovery Temporarily Locked**\n\n"
+                f"Too many failed code attempts.\n"
+                f"Please try again in about **{remaining} minute(s)**.",
+                parse_mode="Markdown",
             )
             self._clear_reset_flow_context(context)
             return ConversationHandler.END
@@ -77,7 +81,10 @@ class ResetHandler:
         if last_requested_at and now < last_requested_at + timedelta(minutes=self.RESET_COOLDOWN_MINUTES):
             remaining = int(((last_requested_at + timedelta(minutes=self.RESET_COOLDOWN_MINUTES)) - now).total_seconds() // 60) + 1
             await update.message.reply_text(
-                f"⏳ A reset was requested recently. Please wait about {remaining} minutes before requesting another code."
+                "⏳ **Please Wait Before Requesting Again**\n\n"
+                "A reset code was generated recently.\n"
+                f"Try again in about **{remaining} minute(s)**.",
+                parse_mode="Markdown",
             )
             self._clear_reset_flow_context(context)
             return ConversationHandler.END
@@ -108,12 +115,15 @@ class ResetHandler:
         context.user_data["in_reset_flow"] = True
 
         await update.message.reply_text(
-            "🔐 **Master Password Recovery**\n\n"
-            "A one-time recovery code has been generated for this Telegram account.\n"
-            f"Recovery code: **{code}**\n\n"
-            f"This code expires in {self.RESET_CODE_EXPIRY_MINUTES} minutes and allows up to {self.RESET_MAX_ATTEMPTS} attempts.\n"
-            "Reply with the code now to continue.\n\n"
-            "⚠️ If this was not you, ignore this message.",
+            "🔐 **Master Password Recovery**\n"
+            "━━━━━━━━━━━━\n\n"
+            "**Step 1/3: Verify your recovery code**\n\n"
+            "We generated a one-time code for this Telegram account:\n"
+            f"`{code}`\n\n"
+            f"• Valid for: **{self.RESET_CODE_EXPIRY_MINUTES} minutes**\n"
+            f"• Attempts allowed: **{self.RESET_MAX_ATTEMPTS}**\n\n"
+            "Reply with this 6-digit code to continue.\n"
+            "Tip: send /cancel to stop at any time.",
             parse_mode="Markdown",
         )
         return AWAITING_RESET_CODE
@@ -122,7 +132,7 @@ class ResetHandler:
         """Verify one-time recovery code."""
         user = update.effective_user
         telegram_id = user.id
-        entered_code = (update.message.text or "").strip()
+        entered_code = self._normalize_code(update.message.text or "")
 
         db_user = self.db.get_user_by_telegram_id(telegram_id)
         if not db_user:
@@ -138,12 +148,21 @@ class ResetHandler:
         if reset_state.get("status") != "code_sent" or not expires_at or expires_at <= now:
             self._clear_reset_state(settings)
             self.db.update_user_settings(db_user["id"], settings)
-            await update.message.reply_text("❌ Reset code expired or invalid. Use /resetmaster to request a new code.")
+            await update.message.reply_text(
+                "❌ **Code Expired**\n\n"
+                "Your recovery code is no longer valid.\n"
+                "Run /resetmaster to request a fresh code.",
+                parse_mode="Markdown",
+            )
             self._clear_reset_flow_context(context)
             return ConversationHandler.END
 
-        if not entered_code.isdigit():
-            await update.message.reply_text("❌ Code must contain only numbers. Please try again:")
+        if not (entered_code.isdigit() and len(entered_code) == 6):
+            await update.message.reply_text(
+                "❌ Please enter a valid **6-digit** code.\n"
+                "Example: `123456`",
+                parse_mode="Markdown",
+            )
             return AWAITING_RESET_CODE
 
         salt = reset_state.get("salt", "")
@@ -162,8 +181,10 @@ class ResetHandler:
                 self._set_reset_state(settings, reset_state)
                 self.db.update_user_settings(db_user["id"], settings)
                 await update.message.reply_text(
-                    "⛔ Too many invalid attempts. Recovery is temporarily locked.\n"
-                    f"Please retry with /resetmaster in {self.RESET_COOLDOWN_MINUTES} minutes."
+                    "⛔ **Recovery Locked**\n\n"
+                    "Too many invalid code attempts.\n"
+                    f"Please run /resetmaster again in **{self.RESET_COOLDOWN_MINUTES} minute(s)**.",
+                    parse_mode="Markdown",
                 )
                 self._clear_reset_flow_context(context)
                 return ConversationHandler.END
@@ -172,7 +193,8 @@ class ResetHandler:
             self.db.update_user_settings(db_user["id"], settings)
             remaining = self.RESET_MAX_ATTEMPTS - attempts
             await update.message.reply_text(
-                f"❌ Invalid code. You have {remaining} attempt(s) remaining."
+                f"❌ Incorrect code. You have **{remaining} attempt(s)** remaining.",
+                parse_mode="Markdown",
             )
             return AWAITING_RESET_CODE
 
@@ -188,13 +210,21 @@ class ResetHandler:
             return ConversationHandler.END
 
         await update.message.reply_text(
-            "✅ Code verified.\n\n"
-            "Now enter your new master password. It must include uppercase, lowercase, a number, and a special character."
+            "✅ **Code Verified**\n"
+            "━━━━━━━━━━━━\n\n"
+            "**Step 2/3: Create your new master password**\n\n"
+            "Your password must include:\n"
+            "• At least 8 characters\n"
+            "• Uppercase and lowercase letters\n"
+            "• At least one number\n"
+            "• At least one special character (e.g. !@#$%^&*)\n\n"
+            "Enter your new password now:",
+            parse_mode="Markdown",
         )
         return AWAITING_NEW_MASTER_PASSWORD
 
     async def set_new_master_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Finalize reset by saving new master password hash."""
+        """Validate and stage new master password before confirmation."""
         user = update.effective_user
         telegram_id = user.id
         new_password = (update.message.text or "").strip()
@@ -213,16 +243,74 @@ class ResetHandler:
         if reset_state.get("status") != "verified" or not verified_until or verified_until <= now:
             self._clear_reset_state(settings)
             self.db.update_user_settings(db_user["id"], settings)
-            await update.message.reply_text("❌ Verification window expired. Please run /resetmaster again.")
+            await update.message.reply_text(
+                "❌ Verification window expired.\n"
+                "Please run /resetmaster again."
+            )
             self._clear_reset_flow_context(context)
             return ConversationHandler.END
 
         is_valid, error = self.auth.validate_password_strength(new_password)
         if not is_valid:
-            await update.message.reply_text(f"❌ {error}\n\nPlease enter a stronger password:")
+            await update.message.reply_text(
+                f"❌ {error}\n\n"
+                "Please enter a stronger password:"
+            )
             return AWAITING_NEW_MASTER_PASSWORD
 
-        new_hash = self.auth.hash_password(new_password)
+        context.user_data["pending_new_master_password"] = new_password
+        await update.message.reply_text(
+            "✅ **Step 2 complete**\n\n"
+            "**Step 3/3: Confirm your new password**\n"
+            "Please re-enter the same password to confirm.",
+            parse_mode="Markdown",
+        )
+        return AWAITING_NEW_MASTER_PASSWORD_CONFIRM
+
+    async def confirm_new_master_password(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Finalize reset by confirming and saving new master password hash."""
+        user = update.effective_user
+        telegram_id = user.id
+        confirm_password = (update.message.text or "").strip()
+        pending_password = context.user_data.get("pending_new_master_password")
+
+        if not pending_password:
+            await update.message.reply_text(
+                "❌ Reset session expired. Please run /resetmaster again."
+            )
+            self._clear_reset_flow_context(context)
+            return ConversationHandler.END
+
+        if confirm_password != pending_password:
+            context.user_data.pop("pending_new_master_password", None)
+            await update.message.reply_text(
+                "❌ Passwords do not match.\n"
+                "Let's try again. Enter your new password:"
+            )
+            return AWAITING_NEW_MASTER_PASSWORD
+
+        db_user = self.db.get_user_by_telegram_id(telegram_id)
+        if not db_user:
+            await update.message.reply_text("❌ Account not found. Use /start first.")
+            self._clear_reset_flow_context(context)
+            return ConversationHandler.END
+
+        settings = self._get_settings(db_user)
+        reset_state = self._get_reset_state(settings)
+        now = self._utcnow()
+
+        verified_until = self._parse_datetime(reset_state.get("verified_until"))
+        if reset_state.get("status") != "verified" or not verified_until or verified_until <= now:
+            self._clear_reset_state(settings)
+            self.db.update_user_settings(db_user["id"], settings)
+            await update.message.reply_text(
+                "❌ Verification window expired.\n"
+                "Please run /resetmaster again."
+            )
+            self._clear_reset_flow_context(context)
+            return ConversationHandler.END
+
+        new_hash = self.auth.hash_password(pending_password)
         if not self.db.update_master_password_by_user_id(db_user["id"], new_hash):
             await update.message.reply_text("❌ Failed to update your master password. Please try again later.")
             self._clear_reset_flow_context(context)
@@ -240,15 +328,21 @@ class ResetHandler:
             pass
 
         await update.message.reply_text(
-            "✅ Master password reset successful.\n"
-            "For security, please run /start and log in with your new password."
+            "✅ **Master Password Updated**\n"
+            "━━━━━━━━━━━━\n\n"
+            "Your account is secure with the new password.\n"
+            "Run /start to sign in again.",
+            parse_mode="Markdown",
         )
         return ConversationHandler.END
 
     async def cancel(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Cancel reset flow."""
         self._clear_reset_flow_context(context)
-        await update.message.reply_text("Recovery cancelled. Use /resetmaster if you need it again.")
+        await update.message.reply_text(
+            "Recovery cancelled.\n"
+            "You can restart anytime with /resetmaster."
+        )
         return ConversationHandler.END
 
     @staticmethod
@@ -256,6 +350,7 @@ class ResetHandler:
         """Clear temporary reset flow flags from user context."""
         context.user_data.pop("reset_user_id", None)
         context.user_data.pop("in_reset_flow", None)
+        context.user_data.pop("pending_new_master_password", None)
 
     def get_handler(self) -> ConversationHandler:
         """Return conversation handler for secure reset flow."""
@@ -267,6 +362,9 @@ class ResetHandler:
                 ],
                 AWAITING_NEW_MASTER_PASSWORD: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.set_new_master_password)
+                ],
+                AWAITING_NEW_MASTER_PASSWORD_CONFIRM: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, self.confirm_new_master_password)
                 ],
             },
             fallbacks=[CommandHandler("cancel", self.cancel)],
@@ -340,6 +438,11 @@ class ResetHandler:
     @staticmethod
     def _generate_code() -> str:
         return str(secrets.randbelow(900000) + 100000)
+
+    @staticmethod
+    def _normalize_code(value: str) -> str:
+        """Normalize user-entered reset code by removing common separators."""
+        return (value or "").strip().replace(" ", "").replace("-", "")
 
     @staticmethod
     def _hash_code(telegram_id: int, code: str, salt: str) -> str:

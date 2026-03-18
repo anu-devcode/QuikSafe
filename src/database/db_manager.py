@@ -442,3 +442,58 @@ class DatabaseManager:
                 json.dumps(metadata or {}),
             ),
         )
+
+    def get_notification_analytics_snapshot(self, days: int = 7) -> Dict[str, Any]:
+        """Return retention-oriented notification metrics for an interval."""
+        interval_days = max(1, min(int(days or 7), 30))
+        sql = """
+        SELECT
+            COUNT(*) FILTER (WHERE event_name = 'notification_task_reminder_sent') AS task_sent,
+            COUNT(*) FILTER (WHERE event_name = 'notification_weekly_summary_sent') AS weekly_sent,
+            COUNT(*) FILTER (WHERE event_name = 'notification_inactivity_nudge_sent') AS inactivity_sent,
+            COUNT(*) FILTER (WHERE event_name = 'notification_reengaged') AS reengaged,
+            COUNT(DISTINCT telegram_id) FILTER (WHERE event_name = 'notification_reengaged') AS reengaged_users,
+            COUNT(*) FILTER (
+                WHERE event_name = 'notification_reengaged'
+                AND metadata->>'notification_type' = 'task_reminder'
+            ) AS task_reengaged,
+            COUNT(*) FILTER (
+                WHERE event_name = 'notification_reengaged'
+                AND metadata->>'notification_type' = 'weekly_summary'
+            ) AS weekly_reengaged,
+            COUNT(*) FILTER (
+                WHERE event_name = 'notification_reengaged'
+                AND metadata->>'notification_type' = 'inactivity_nudge'
+            ) AS inactivity_reengaged
+        FROM analytics_events
+        WHERE created_at >= NOW() - (%s || ' days')::interval
+        """
+        row = self._fetchone(sql, (interval_days,)) or {}
+        task_sent = int(row.get("task_sent", 0) or 0)
+        weekly_sent = int(row.get("weekly_sent", 0) or 0)
+        inactivity_sent = int(row.get("inactivity_sent", 0) or 0)
+        reengaged = int(row.get("reengaged", 0) or 0)
+        task_reengaged = int(row.get("task_reengaged", 0) or 0)
+        weekly_reengaged = int(row.get("weekly_reengaged", 0) or 0)
+        inactivity_reengaged = int(row.get("inactivity_reengaged", 0) or 0)
+        total_sent = task_sent + weekly_sent + inactivity_sent
+        conversion_rate = (reengaged / total_sent) if total_sent > 0 else 0.0
+        task_rate = (task_reengaged / task_sent) if task_sent > 0 else 0.0
+        weekly_rate = (weekly_reengaged / weekly_sent) if weekly_sent > 0 else 0.0
+        inactivity_rate = (inactivity_reengaged / inactivity_sent) if inactivity_sent > 0 else 0.0
+        return {
+            "days": interval_days,
+            "task_sent": task_sent,
+            "weekly_sent": weekly_sent,
+            "inactivity_sent": inactivity_sent,
+            "total_sent": total_sent,
+            "reengaged": reengaged,
+            "reengaged_users": int(row.get("reengaged_users", 0) or 0),
+            "conversion_rate": conversion_rate,
+            "task_reengaged": task_reengaged,
+            "weekly_reengaged": weekly_reengaged,
+            "inactivity_reengaged": inactivity_reengaged,
+            "task_conversion_rate": task_rate,
+            "weekly_conversion_rate": weekly_rate,
+            "inactivity_conversion_rate": inactivity_rate,
+        }

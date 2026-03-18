@@ -98,33 +98,25 @@ An AI-integrated Telegram bot designed to securely save, organize, and manage pa
 - Type simple intents like `add task`, `save password`, or `files` for smart routing
 - Multi-step wizards keep a single clean bot message (less chat clutter)
 
+### Smart Notifications
+- Due-soon reminders for tasks with upcoming deadlines
+- Weekly productivity snapshot (optional, configurable in Settings)
+- Inactivity nudges for users with unfinished work
+- Quiet hours and cadence controls in Settings to reduce notification fatigue
+
 ### Commands
 
-#### Password Management
-- `/savepassword` - Save a new password
-- `/getpassword <service>` - Retrieve a password
-- `/listpasswords` - List all saved passwords
-- `/deletepassword <service>` - Delete a password
+QuikSafe is now **button-first**. Most actions are done using Telegram menu buttons and inline sequences.
 
-#### Task Management
-- `/addtask <task>` - Create a new task
-- `/listtasks` - View all tasks
-- `/completetask <id>` - Mark task as complete
-- `/deletetask <id>` - Delete a task
-
-#### File Management
-- Send any file to save it
-- `/listfiles` - List all saved files
-- `/getfile <name>` - Retrieve a file
-- `/deletefile <id>` - Delete a file
-
-#### AI Features
-- `/search <query>` - Smart search across all data
-- `/summarize` - Get AI summary of your tasks
+#### Core Commands
+- `/start` - Authenticate and open the main menu
+- `/help` - Show usage help
+- `/search <query>` - Global cross-data search
 
 #### Account Recovery
-- `/resetmaster` - Securely recover your account if you forgot the master password
+- `/resetmaster` - Guided 3-step recovery (code verification, new password, confirmation)
 - `/adminreset <telegram_id>` - Admin-only unlock for reset flow (requires SUPPORT_ADMIN_TELEGRAM_IDS)
+- `/adminstats [days]` - Admin-only notification/retention snapshot for last N days (1-30)
 
 ## Security Features
 
@@ -143,6 +135,22 @@ QuikSafe tracks product events in `analytics_events` for onboarding and retentio
 - callback action clicks
 - blocked unauthenticated actions
 - unhandled runtime errors
+- notification delivery events (task reminders, weekly summaries, inactivity nudges)
+
+## Notification Controls
+
+In Telegram: `Settings` -> `Notifications`
+- Toggle task reminders and weekly summary
+- Cycle due-soon reminder window (6h/12h/24h/48h)
+- Cycle inactivity nudge interval (48h/72h/96h/168h)
+- Toggle and cycle quiet hours (suppresses reminders during selected local window)
+- Cycle timezone offset for accurate quiet-hour enforcement
+- Set exact timezone offset manually (examples: `UTC+05:30`, `+2`, `-04:00`, `Z`)
+
+Scheduler behavior:
+- Task reminder job runs hourly with per-user daily anti-spam guard
+- Weekly summary job runs periodically and sends at most once per ISO week
+- Inactivity nudge job runs periodically with per-user cooldown enforcement
 
 ## Project Structure
 

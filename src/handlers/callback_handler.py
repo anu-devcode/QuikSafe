@@ -194,9 +194,9 @@ class CallbackHandler:
         
         message = (
             f"👋 **Welcome back, {user_name}!**\n\n"
-            "Your secure workspace is ready.\n\n"
-            "**Fast lane:** use Quick Save / Quick Task / Quick Upload.\n"
-            "**Full control:** open Password Vault, Task Planner, File Hub, AI, or Settings."
+            "Your secure command center is ready.\n\n"
+            "**Express lane**: Quick Capture, Quick Plan, Drop File.\n"
+            "**Power lane**: Vault, Planner, Library, AI Studio, Control."
         )
         
         await query.edit_message_text(
@@ -210,9 +210,9 @@ class CallbackHandler:
         query = update.callback_query
         message = (
             "🔐 **Password Vault**\n\n"
-            "Save, view, and organize credentials securely.\n"
-            "Everything is encrypted before storage.\n\n"
-            "Choose your next action:"
+            "Premium storage for credentials and access notes.\n"
+            "Encrypted before write, secure by design.\n\n"
+            "Select your vault action:"
         )
         
         await query.edit_message_text(
@@ -226,8 +226,8 @@ class CallbackHandler:
         query = update.callback_query
         message = (
             "✅ **Task Planner**\n\n"
-            "Capture tasks quickly, set priority, and track progress.\n\n"
-            "Choose a view or add a new task:"
+            "Run your day with clear priorities and clean execution.\n\n"
+            "Open a board view or create a fresh task:"
         )
         
         await query.edit_message_text(
@@ -241,8 +241,9 @@ class CallbackHandler:
         query = update.callback_query
         message = (
             "📁 **File Hub**\n\n"
-            "Upload and organize documents, photos, videos, and audio.\n\n"
-            "Browse by type or view everything:"
+            "Your personal media and document library.\n"
+            "Everything is indexed for instant retrieval.\n\n"
+            "Browse the library by type or open all files:"
         )
         
         await query.edit_message_text(
@@ -256,7 +257,7 @@ class CallbackHandler:
         query = update.callback_query
         message = (
             "🔍 **Smart Search**\n\n"
-            "Search across passwords, tasks, and files in one place.\n\n"
+            "One prompt searches credentials, tasks, and files.\n\n"
             "Use: `/search <your query>`\n"
             "Example: `/search invoices march`"
         )
@@ -300,16 +301,16 @@ class CallbackHandler:
     async def _quick_upload_file(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Quick action: Upload file."""
         await update.callback_query.edit_message_text(
-            "📁 **Upload File**\n\n"
-            "Send any file, photo, video, audio, or voice message now.\n"
-            "I will store it securely and make it searchable."
+            "📁 **Drop File**\n\n"
+            "Send any document, photo, video, audio, or voice clip now.\n"
+            "It will be secured and indexed instantly."
         )
     
     async def _quick_search(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Quick action: Search."""
         await update.callback_query.edit_message_text(
             "🔍 **Smart Search**\n\n"
-            "Search across all your data.\n\n"
+            "Find anything across your workspace in one command.\n\n"
             "Use: /search <your query>\n"
             "Example: /search urgent tasks this week"
         )
@@ -485,6 +486,24 @@ class CallbackHandler:
             
         elif action == 'settings_toggle_summary':
             await self.settings_handler.toggle_setting(update, 'summary')
+
+        elif action == 'settings_cycle_task_window':
+            await self.settings_handler.cycle_task_window(update)
+
+        elif action == 'settings_cycle_inactivity':
+            await self.settings_handler.cycle_inactivity_window(update)
+
+        elif action == 'settings_toggle_quiet':
+            await self.settings_handler.toggle_quiet_hours(update)
+
+        elif action == 'settings_cycle_quiet_window':
+            await self.settings_handler.cycle_quiet_window(update)
+
+        elif action == 'settings_cycle_timezone':
+            await self.settings_handler.cycle_timezone(update)
+
+        elif action == 'settings_set_timezone':
+            await self.settings_handler.start_set_timezone_wizard(update)
             
         elif action == 'settings_changepass':
             await self.settings_handler.start_change_password_wizard(update)

@@ -352,35 +352,30 @@ def format_help_message() -> str:
     """Format help message with all commands."""
     return """📖 **QuikSafe Bot - Help**
 
-**Password Management** 🔐
-/savepassword - Save a new password
-/getpassword <service> - Retrieve a password
-/listpasswords - List all saved passwords
-/deletepassword <id> - Delete a password
+**Button-First Navigation**
+Use the menu buttons after login:
+- 🔐 Password Vault
+- ✅ Task Planner
+- 📁 File Hub
+- 🤖 AI Assistant
+- ⚙️ Settings
 
-**Task Management** ✅
-/addtask <task> - Create a new task
-/listtasks - View all tasks
-/completetask <id> - Mark task as complete
-/deletetask <id> - Delete a task
-
-**File Management** 📁
-Send any file to save it
-/listfiles - List all saved files
-/getfile <name> - Retrieve a file
-/deletefile <id> - Delete a file
-
-**AI Features** 🤖
-/search <query> - Smart search across all data
-/summarize - Get AI summary of your tasks
+**Quick Actions**
+- Quick Save
+- Quick Task
+- Quick Upload
+- Quick Search
 
 **Other Commands**
 /help - Show this help message
 /start - Restart the bot
-/resetmaster - Recover access if master password is forgotten
+/search <query> - Global search across all data
+/resetmaster - Guided 3-step recovery if master password is forgotten
 /adminreset <telegram_id> - Admin-only unlock for reset flow
+/adminstats [days] - Admin-only retention snapshot (1-30 days)
 
 💡 **Tips:**
+- Use menu buttons instead of typing commands
 - Use tags (e.g., #work #important) to organize your data
 - All sensitive data is encrypted with AES-256
 - Your master password is never stored in plaintext

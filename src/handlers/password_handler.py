@@ -75,9 +75,18 @@ class PasswordHandler:
         
         # Build message
         if not passwords:
-            message = "🔐 **No passwords saved yet.**\n\nUse 'Save New Password' to add one!"
+            message = (
+                "🔐 **Vault Is Empty**\n"
+                "━━━━━━━━━━━━\n\n"
+                "No credentials stored yet.\n"
+                "Start with **Add New Credential** to build your secure vault."
+            )
         else:
-            message = f"🔐 **Your Passwords** ({len(passwords)} total)\n\n"
+            message = (
+                f"🔐 **Vault Collection**\n"
+                "━━━━━━━━━━━━\n"
+                f"{len(passwords)} saved item(s)\n\n"
+            )
             for i, pwd in enumerate(current_page_items, 1):
                 service = pwd.get('service_name', 'Unknown')
                 tags = pwd.get('tags', [])
@@ -104,11 +113,11 @@ class PasswordHandler:
         # Action buttons
         keyboard.append([
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['add']} Add New",
+                f"{self.kb.EMOJI['add']} Add Credential",
                 callback_data=self.kb.encode_callback('password_save_start')
             ),
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['search']} Search",
+                f"{self.kb.EMOJI['search']} Find",
                 callback_data=self.kb.encode_callback('password_search')
             )
         ])
@@ -425,18 +434,20 @@ class PasswordHandler:
         )
         
         msg = (
-            f"✅ **Password Saved!**\n\n"
-            f"Service: {service_name}\n"
-            f"Tags: {', '.join(tags) if tags else 'None'}"
+            "✅ **Vault Entry Added**\n"
+            "━━━━━━━━━━━━\n\n"
+            f"Service: **{service_name}**\n"
+            f"Tags: {', '.join(tags) if tags else 'None'}\n\n"
+            "Stored with end-to-end encrypted fields."
         )
         
         keyboard = [[
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['view']} View List",
+                    f"{self.kb.EMOJI['view']} Open Vault",
                 callback_data=self.kb.encode_callback('password_list', p=0)
             ),
             InlineKeyboardButton(
-                f"{self.kb.EMOJI['add']} Add Another",
+                    f"{self.kb.EMOJI['add']} Add Another",
                 callback_data=self.kb.encode_callback('password_save_start')
             )
         ]]

@@ -78,11 +78,17 @@ class FileHandler:
         filter_text = f" ({filter_label})"
         if not files:
             message = (
-                f"📁 **No Files Found{filter_text}.**\n\n"
-                "Send any file, photo, video, audio, or voice note to save it securely."
+                "📁 **Library Is Empty**\n"
+                "━━━━━━━━━━━━\n\n"
+                f"No files found{filter_text}.\n"
+                "Drop any file, photo, video, audio, or voice clip to start your library."
             )
         else:
-            message = f"📁 **File Hub**{filter_text} ({len(files)} total)\n\n"
+            message = (
+                "📁 **Library Index**\n"
+                "━━━━━━━━━━━━\n"
+                f"{len(files)} stored item(s){filter_text}\n\n"
+            )
             for i, f in enumerate(current_page_items, 1):
                 file_type = f.get('file_type', '')
                 if 'image' in file_type:
@@ -340,19 +346,21 @@ class FileHandler:
             escaped_tags = [self._escape_markdown(t) for t in tags]
             
             msg = (
-                f"✅ **File Saved Successfully**\n\n"
+                "✅ **File Added To Library**\n"
+                "━━━━━━━━━━━━\n\n"
                 f"📎 {escaped_name}\n"
                 f"Size: {self._format_size(file_size)}\n"
-                f"Tags: {', '.join(escaped_tags) if escaped_tags else 'None'}"
+                f"Tags: {', '.join(escaped_tags) if escaped_tags else 'None'}\n\n"
+                "Indexed and ready for instant retrieval."
             )
             
             keyboard = [[
                 InlineKeyboardButton(
-                    f"{self.kb.EMOJI['view']} View List",
+                    f"{self.kb.EMOJI['view']} Open Library",
                     callback_data=self.kb.encode_callback('file_list', p=0)
                 ),
                 InlineKeyboardButton(
-                    f"{self.kb.EMOJI['add']} Upload More",
+                    f"{self.kb.EMOJI['add']} Add More",
                     callback_data=self.kb.encode_callback('quick_upload_file')
                 )
             ]]
