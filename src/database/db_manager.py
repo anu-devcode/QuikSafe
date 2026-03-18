@@ -295,30 +295,30 @@ class DatabaseManager:
         sql = "SELECT * FROM tasks WHERE user_id = %s ORDER BY created_at DESC"
         return self._fetchall(sql, (user_id,))
 
-        def get_due_soon_tasks(self, user_id: str, hours: int = 24) -> List[Dict[str, Any]]:
-                sql = """
-                SELECT *
-                FROM tasks
-                WHERE user_id = %s
-                    AND status != 'completed'
-                    AND due_date IS NOT NULL
-                    AND due_date >= NOW()
-                    AND due_date <= NOW() + (%s || ' hours')::interval
-                ORDER BY due_date ASC
-                """
-                return self._fetchall(sql, (user_id, max(1, hours)))
+    def get_due_soon_tasks(self, user_id: str, hours: int = 24) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT *
+        FROM tasks
+        WHERE user_id = %s
+            AND status != 'completed'
+            AND due_date IS NOT NULL
+            AND due_date >= NOW()
+            AND due_date <= NOW() + (%s || ' hours')::interval
+        ORDER BY due_date ASC
+        """
+        return self._fetchall(sql, (user_id, max(1, hours)))
 
-        def get_overdue_tasks(self, user_id: str) -> List[Dict[str, Any]]:
-                sql = """
-                SELECT *
-                FROM tasks
-                WHERE user_id = %s
-                    AND status != 'completed'
-                    AND due_date IS NOT NULL
-                    AND due_date < NOW()
-                ORDER BY due_date ASC
-                """
-                return self._fetchall(sql, (user_id,))
+    def get_overdue_tasks(self, user_id: str) -> List[Dict[str, Any]]:
+        sql = """
+        SELECT *
+        FROM tasks
+        WHERE user_id = %s
+            AND status != 'completed'
+            AND due_date IS NOT NULL
+            AND due_date < NOW()
+        ORDER BY due_date ASC
+        """
+        return self._fetchall(sql, (user_id,))
 
     def get_task_by_id(self, task_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         sql = "SELECT * FROM tasks WHERE id = %s AND user_id = %s LIMIT 1"

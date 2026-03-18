@@ -10,6 +10,7 @@ from src.security.auth import AuthManager, SessionManager
 from src.utils.formatters import format_welcome_message
 from src.utils.keyboard_builder import KeyboardBuilder
 from src.utils.deep_links import DeepLinkManager
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -170,6 +171,7 @@ class StartHandler:
                 
                 # Show modern main menu
                 await self._show_main_menu(update.message, user.first_name, existing_user['id'], deep_link_data)
+                self._mark_last_seen(existing_user['id'])
                 if self.analytics:
                     self.analytics.track('auth_login_success', telegram_id=telegram_id, user_id=existing_user['id'])
                 
@@ -199,6 +201,7 @@ class StartHandler:
 
                     deep_link_data = context.user_data.get('deep_link')
                     await self._show_main_menu(update.message, user.first_name, existing_user['id'], deep_link_data)
+                    self._mark_last_seen(existing_user['id'])
                     if 'deep_link' in context.user_data:
                         del context.user_data['deep_link']
                     self._clear_auth_flow_context(context)
@@ -239,6 +242,7 @@ class StartHandler:
                 
                 # Show modern main menu
                 await self._show_main_menu(update.message, user.first_name, new_user['id'], deep_link_data)
+                self._mark_last_seen(new_user['id'])
                 if self.analytics:
                     self.analytics.track('auth_registration_success', telegram_id=telegram_id, user_id=new_user['id'])
                 
@@ -329,6 +333,19 @@ class StartHandler:
         """Clear temporary onboarding flags from user context."""
         context.user_data.pop('auth_flow_mode', None)
         context.user_data.pop('awaiting_master_password', None)
+
+    def _mark_last_seen(self, user_id: str):
+        """Best-effort update of user activity metadata for retention nudges."""
+        try:
+            settings = self.db.get_user_settings(user_id)
+            notifications = settings.get('notifications') if isinstance(settings, dict) else None
+            if not isinstance(notifications, dict):
+                notifications = {}
+            notifications['last_seen_at'] = datetime.now(timezone.utc).isoformat()
+            settings['notifications'] = notifications
+            self.db.update_user_settings(user_id, settings)
+        except Exception as exc:
+            logger.debug("Failed to mark last_seen_at for user %s: %s", user_id, exc)
     
     def get_handler(self) -> ConversationHandler:
         """

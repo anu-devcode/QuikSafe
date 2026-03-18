@@ -22,8 +22,10 @@ from src.handlers import (
 )
 from src.handlers.callback_handler import CallbackHandler
 from src.analytics import AnalyticsTracker
+from src.notifications import ReminderService
 from src.utils.scene_manager import SceneManager
 import logging
+from time import monotonic
 
 # Configure logging
 logging.basicConfig(
@@ -63,6 +65,7 @@ def main():
         ai_client = HuggingFaceClient(Config.HUGGINGFACE_API_KEY)
         scene_manager = SceneManager()
         analytics = AnalyticsTracker(db)
+        reminder_service = ReminderService(db, encryption, analytics)
         
         logger.info("All components initialized successfully")
     except Exception as e:
@@ -131,6 +134,33 @@ def main():
         analytics.track('security_blocked_command', telegram_id=user.id, metadata={'command': command})
         raise ApplicationHandlerStop
 
+    def _should_touch_activity(context) -> bool:
+        """Throttle write frequency for activity timestamps to reduce DB churn."""
+        now = monotonic()
+        last_seen = context.user_data.get('_last_activity_touch_at', 0.0)
+        if now - last_seen < 600:
+            return False
+        context.user_data['_last_activity_touch_at'] = now
+        return True
+
+    def _touch_activity_if_authenticated(telegram_id: int, context):
+        """Persist best-effort last activity signal for retention nudges."""
+        try:
+            if not session.is_authenticated(telegram_id):
+                return
+            if not _should_touch_activity(context):
+                return
+
+            session_data = session.get_session(telegram_id) or {}
+            user_id = session_data.get('user_id')
+            if not user_id:
+                return
+
+            settings = db.get_user_settings(user_id)
+            reminder_service.mark_seen(user_id, settings)
+        except Exception as exc:
+            logger.debug("Skipping activity touch for %s: %s", telegram_id, exc)
+
     async def unauth_input_guard(update: Update, context):
         """Block unauthenticated text/uploads outside login and reset recovery flows."""
         message = update.effective_message
@@ -193,6 +223,20 @@ def main():
             )
             raise ApplicationHandlerStop
 
+    async def activity_message_tracker(update: Update, context):
+        """Track authenticated user message activity for inactivity reminders."""
+        user = update.effective_user
+        if not user:
+            return
+        _touch_activity_if_authenticated(user.id, context)
+
+    async def activity_callback_tracker(update: Update, context):
+        """Track authenticated callback interactions for inactivity reminders."""
+        user = update.effective_user
+        if not user:
+            return
+        _touch_activity_if_authenticated(user.id, context)
+
     async def global_error_handler(update: object, context):
         """Graceful fallback for unexpected failures."""
         logger.exception("Unhandled bot error", exc_info=context.error)
@@ -253,6 +297,18 @@ def main():
         | filters.VOICE
     )
     application.add_handler(MessageHandler(protected_non_command_filters, unauth_input_guard), group=-1)
+
+    # Track activity after auth checks and before feature routing.
+    activity_filters = (
+        (filters.TEXT & ~filters.COMMAND)
+        | filters.Document.ALL
+        | filters.PHOTO
+        | filters.VIDEO
+        | filters.AUDIO
+        | filters.VOICE
+    )
+    application.add_handler(MessageHandler(activity_filters, activity_message_tracker), group=0)
+    application.add_handler(CallbackQueryHandler(activity_callback_tracker), group=-1)
     
     # We keep the legacy handlers for now but they might not be needed if we use global handler
     # application.add_handler(password_handler.get_save_handler())
@@ -297,6 +353,40 @@ def main():
     application.add_handler(CommandHandler('search', search_handler.search))
     application.add_handler(CommandHandler('ai', ai_handler.show_menu))
     application.add_handler(CommandHandler('summarize', search_handler.summarize))
+
+    async def run_task_reminders(context):
+        await reminder_service.run_task_reminders(context)
+
+    async def run_weekly_summary(context):
+        await reminder_service.run_weekly_summary(context)
+
+    async def run_inactivity_nudges(context):
+        await reminder_service.run_inactivity_nudges(context)
+
+    if application.job_queue:
+        application.job_queue.run_repeating(
+            run_task_reminders,
+            interval=60 * 60,
+            first=2 * 60,
+            name='task_reminders',
+        )
+        application.job_queue.run_repeating(
+            run_weekly_summary,
+            interval=6 * 60 * 60,
+            first=5 * 60,
+            name='weekly_summary',
+        )
+        application.job_queue.run_repeating(
+            run_inactivity_nudges,
+            interval=4 * 60 * 60,
+            first=3 * 60,
+            name='inactivity_nudges',
+        )
+        logger.info("Notification scheduler initialized")
+    else:
+        logger.warning(
+            "JobQueue unavailable. Install python-telegram-bot job queue extras to enable reminders."
+        )
     
     # Start the bot
     application.add_error_handler(global_error_handler)

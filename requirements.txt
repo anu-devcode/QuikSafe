@@ -1,5 +1,5 @@
-# Telegram Bot Framework
-python-telegram-bot==21.0
+# Telegram Bot Framework (includes JobQueue support)
+python-telegram-bot[job-queue]==21.0
 
 # Database
 psycopg[binary,pool]==3.2.1
