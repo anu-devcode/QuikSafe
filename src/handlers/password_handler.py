@@ -532,6 +532,12 @@ class PasswordHandler:
 
     async def delete_password_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy delete password."""
+        user = update.effective_user
+        is_auth, _ = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
         await update.message.reply_text("Please use the 'Delete' button in the password list.")
         await self.show_password_list(update)
 

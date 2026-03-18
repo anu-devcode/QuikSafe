@@ -21,7 +21,7 @@ AWAITING_MASTER_PASSWORD = 1
 class StartHandler:
     """Handles /start command and user registration."""
     
-    def __init__(self, db: DatabaseManager, auth: AuthManager, session: SessionManager):
+    def __init__(self, db: DatabaseManager, auth: AuthManager, session: SessionManager, scene_manager=None):
         """
         Initialize start handler.
         
@@ -33,6 +33,7 @@ class StartHandler:
         self.db = db
         self.auth = auth
         self.session = session
+        self.scene_manager = scene_manager
     
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """
@@ -47,6 +48,11 @@ class StartHandler:
         """
         user = update.effective_user
         telegram_id = user.id
+
+        # Always reset previous onboarding markers and stale scenes when /start is used.
+        self._clear_auth_flow_context(context)
+        if self.scene_manager and self.scene_manager.has_active_scene(telegram_id):
+            self.scene_manager.cancel_scene(telegram_id)
         
         # Check for deep link parameters
         deep_link_data = None
@@ -60,6 +66,9 @@ class StartHandler:
         existing_user = self.db.get_user_by_telegram_id(telegram_id)
         
         if existing_user:
+            context.user_data['auth_flow_mode'] = 'login'
+            context.user_data['awaiting_master_password'] = True
+
             # User exists, ask for master password
             message = f"👋 Welcome back, {user.first_name}!\n\n"
             
@@ -77,6 +86,9 @@ class StartHandler:
             
             return AWAITING_MASTER_PASSWORD
         else:
+            context.user_data['auth_flow_mode'] = 'register'
+            context.user_data['awaiting_master_password'] = True
+
             # New user, show welcome and ask to create master password
             welcome_msg = format_welcome_message(user.first_name)
             await update.message.reply_text(welcome_msg)
@@ -118,8 +130,21 @@ class StartHandler:
         
         # Check if user exists
         existing_user = self.db.get_user_by_telegram_id(telegram_id)
-        
-        if existing_user:
+        flow_mode = context.user_data.get('auth_flow_mode')
+
+        if flow_mode not in ('login', 'register'):
+            flow_mode = 'login' if existing_user else 'register'
+
+        if flow_mode == 'login':
+            # If the user was expected to login but no account exists, switch cleanly to registration.
+            if not existing_user:
+                context.user_data['auth_flow_mode'] = 'register'
+                await update.message.reply_text(
+                    "ℹ️ No account found for this Telegram user yet.\n"
+                    "Please create a master password to register:"
+                )
+                return AWAITING_MASTER_PASSWORD
+
             # Verify password
             stored_hash = existing_user['master_password_hash']
             
@@ -140,6 +165,7 @@ class StartHandler:
                 # Clear deep link data
                 if 'deep_link' in context.user_data:
                     del context.user_data['deep_link']
+                self._clear_auth_flow_context(context)
                 
                 return ConversationHandler.END
             else:
@@ -148,6 +174,30 @@ class StartHandler:
                 )
                 return AWAITING_MASTER_PASSWORD
         else:
+            # If account already exists during register mode, redirect to login flow.
+            if existing_user:
+                stored_hash = existing_user.get('master_password_hash', '')
+                if stored_hash and self.auth.verify_password(master_password, stored_hash):
+                    self.session.create_session(telegram_id, {
+                        'user_id': existing_user['id'],
+                        'telegram_id': telegram_id,
+                        'authenticated': True
+                    })
+
+                    deep_link_data = context.user_data.get('deep_link')
+                    await self._show_main_menu(update.message, user.first_name, deep_link_data)
+                    if 'deep_link' in context.user_data:
+                        del context.user_data['deep_link']
+                    self._clear_auth_flow_context(context)
+                    return ConversationHandler.END
+
+                context.user_data['auth_flow_mode'] = 'login'
+                await update.message.reply_text(
+                    "ℹ️ An account already exists for this Telegram user.\n"
+                    "Please enter your existing master password to continue:"
+                )
+                return AWAITING_MASTER_PASSWORD
+
             # New user - validate and create account
             is_valid, error = self.auth.validate_password_strength(master_password)
             
@@ -178,12 +228,14 @@ class StartHandler:
                 # Clear deep link data
                 if 'deep_link' in context.user_data:
                     del context.user_data['deep_link']
+                self._clear_auth_flow_context(context)
                 
                 return ConversationHandler.END
             else:
                 await update.message.reply_text(
                     "❌ Failed to create account. Please try /start again."
                 )
+                self._clear_auth_flow_context(context)
                 return ConversationHandler.END
     
     async def _show_main_menu(self, message, user_name: str, deep_link_data: dict = None):
@@ -241,7 +293,14 @@ class StartHandler:
         await update.message.reply_text(
             "Operation cancelled. Type /start to begin again."
         )
+        self._clear_auth_flow_context(context)
         return ConversationHandler.END
+
+    @staticmethod
+    def _clear_auth_flow_context(context: ContextTypes.DEFAULT_TYPE):
+        """Clear temporary onboarding flags from user context."""
+        context.user_data.pop('auth_flow_mode', None)
+        context.user_data.pop('awaiting_master_password', None)
     
     def get_handler(self) -> ConversationHandler:
         """

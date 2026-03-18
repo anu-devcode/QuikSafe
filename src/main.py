@@ -71,7 +71,7 @@ def main():
     application = Application.builder().token(Config.TELEGRAM_BOT_TOKEN).build()
     
     # Initialize handlers
-    start_handler = StartHandler(db, auth, session)
+    start_handler = StartHandler(db, auth, session, scene_manager)
     password_handler = PasswordHandler(db, encryption, session, scene_manager)
     task_handler = TaskHandler(db, encryption, session, scene_manager)
     file_handler = FileHandler(db, encryption, session, scene_manager)
@@ -95,6 +95,10 @@ def main():
         """Route messages to appropriate wizard handler."""
         user = update.effective_user
         if not user:
+            return
+
+        # Never mix onboarding auth input with wizard flows.
+        if context.user_data.get('awaiting_master_password'):
             return
             
         # Check if user has active scene

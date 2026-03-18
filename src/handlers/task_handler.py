@@ -484,11 +484,23 @@ class TaskHandler:
 
     async def complete_task_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy complete task."""
+        user = update.effective_user
+        is_auth, _ = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
         await update.message.reply_text("Please use the 'View' button in the task list to complete tasks.")
         await self.show_task_list(update)
 
     async def delete_task_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Legacy delete task."""
+        user = update.effective_user
+        is_auth, _ = self._check_auth(user.id)
+        if not is_auth:
+            await self._send_auth_error(update)
+            return
+
         await update.message.reply_text("Please use the 'Delete' button in the task list.")
         await self.show_task_list(update)
 
